@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enroll Student - Smart Attendance System</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🎯 Smart Vision-Based Attendance System</h1>
+        <nav>
+          <a href="/" class="nav-link">Dashboard</a>
+          <a href="/enroll" class="nav-link active">Enroll Student</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="enroll-section">
+          <h2>👤 Enroll New Student</h2>
+
+          <form id="enroll-form" class="enroll-form">
+            <div class="form-group">
+              <label for="student-id">Student ID *</label>
+              <input
+                type="text"
+                id="student-id"
+                name="student_id"
+                required
+                placeholder="e.g., STU001"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="student-name">Full Name *</label>
+              <input
+                type="text"
+                id="student-name"
+                name="name"
+                required
+                placeholder="Enter student's full name"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="student-email">Email</label>
+              <input
+                type="email"
+                id="student-email"
+                name="email"
+                placeholder="student@example.com"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Face Capture</label>
+              <div class="camera-container">
+                <div id="enroll-camera" class="camera-placeholder">
+                  <p>Camera feed for face capture</p>
+                  <button
+                    type="button"
+                    id="start-enroll-camera"
+                    class="btn btn-secondary"
+                  >
+                    Start Camera
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="capture-face"
+                class="btn btn-secondary"
+                disabled
+              >
+                📸 Capture Face
+              </button>
+              <p id="capture-status" class="capture-status"></p>
+            </div>
+
+            <div class="form-actions">
+              <button
+                type="submit"
+                class="btn btn-primary"
+                id="enroll-btn"
+                disabled
+              >
+                ✅ Enroll Student
+              </button>
+              <button type="reset" class="btn btn-secondary">
+                🔄 Clear Form
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="students-section">
+          <h2>📋 Enrolled Students</h2>
+          <div id="students-list" class="students-list">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Enrolled Date</th>
+                </tr>
+              </thead>
+              <tbody id="students-tbody">
+                <!-- Students will be populated here -->
+                <tr>
+                  <td colspan="4" class="empty-message">
+                    No students enrolled yet
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <p>&copy; 2024 Smart Attendance System - Mechatronics Project</p>
+      </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  </body>
+</html>

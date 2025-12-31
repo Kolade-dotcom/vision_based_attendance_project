@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Attendance System - Dashboard</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🎯 Smart Vision-Based Attendance System</h1>
+        <nav>
+          <a href="/" class="nav-link active">Dashboard</a>
+          <a href="/enroll" class="nav-link">Enroll Student</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="camera-section">
+          <h2>📸 Live Camera Feed</h2>
+          <div class="camera-container">
+            <div id="camera-feed" class="camera-placeholder">
+              <p>Camera feed will appear here</p>
+              <button id="start-camera" class="btn btn-primary">
+                Start Camera
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="attendance-section">
+          <h2>📋 Today's Attendance</h2>
+          <div id="attendance-list" class="attendance-list">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Name</th>
+                  <th>Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="attendance-tbody">
+                <!-- Attendance records will be populated here -->
+                <tr>
+                  <td colspan="4" class="empty-message">
+                    No attendance records yet today
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="stats-section">
+          <h2>📊 Statistics</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-number" id="total-present">0</span>
+              <span class="stat-label">Present Today</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number" id="total-late">0</span>
+              <span class="stat-label">Late Today</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number" id="total-students">0</span>
+              <span class="stat-label">Total Students</span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <p>&copy; 2025 Smart Attendance System - Mechatronics Project</p>
+      </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  </body>
+</html>

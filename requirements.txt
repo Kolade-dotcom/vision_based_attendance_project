@@ -1,0 +1,18 @@
+# Core Framework
+flask==3.0.0
+
+# Computer Vision
+opencv-python>=4.10.0
+numpy>=2.1.0
+
+# Face Recognition
+# NOTE: face_recognition depends on dlib, which requires special setup on Windows.
+# See README.md for detailed installation instructions.
+face_recognition==1.3.0
+dlib==19.24.99
+
+# Hardware Communication
+pyserial==3.5
+
+# Development & Utilities
+python-dotenv>=1.0.0
