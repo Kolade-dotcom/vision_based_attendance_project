@@ -10,16 +10,22 @@ A Flask-based attendance system using **computer vision** and **face recognition
 - [Running the Application](#-running-the-application)
 - [Project Structure](#-project-structure)
 - [API Endpoints](#-api-endpoints)
+- [Testing](#-testing)
 
 ---
 
 ## ✨ Features
 
-- 📸 Real-time face detection and recognition
-- 👤 Student enrollment with face capture
-- 📊 Attendance tracking and statistics
-- 🔌 Arduino integration for hardware feedback (LEDs, buzzers, door control)
-- 💾 SQLite database for persistent storage
+- 📸 **Real-time Face Detection**: Automated attendance marking via webcam.
+- 👤 **Student Enrollment**:
+  - **Matric Number** support (e.g., `125/22/1/0178`).
+  - **Level** selection (100-500).
+  - **Course** registration (Enroll in specific courses).
+- 📊 **Dashboard & Analytics**:
+  - Real-time attendance table.
+  - Filter statistics by **Level** and **Course**.
+- 🔌 **Hardware Integration**: Arduino bridge for LEDs, buzzers, and door control.
+- 💾 **SQLite Database**: Persistent storage for students and attendance logs.
 
 ---
 
@@ -58,11 +64,14 @@ python -m venv venv
    ```
 
 2. **Install remaining dependencies**:
-   ```powershell
-   pip install -r requirements.txt
-   ```
+
+```powershell
+pip install -r requirements.txt
+```
 
 ### Step 4: Initialize the Database
+
+The application auto-initializes the database on first run, or you can force it:
 
 ```powershell
 python -c "from db_helper import init_database; init_database()"
@@ -88,65 +97,50 @@ Open your browser and navigate to: **http://localhost:5000**
 
 ```
 /vision_attendance_project
+├── /api
+│   ├── /controllers     # Business logic
+│   └── /routes          # API endpoints (Blueprints)
 ├── /static
-│   ├── /css
-│   │   └── style.css        # Main stylesheet
-│   ├── /js
-│   │   └── main.js          # Frontend JavaScript
-│   └── /images              # Static images
-├── /templates
-│   ├── index.html           # Dashboard page
-│   └── enroll.html          # Student enrollment page
-├── /database
-│   └── schema.sql           # SQLite schema
-├── app.py                   # Flask entry point
-├── camera.py                # OpenCV camera & face detection
-├── db_helper.py             # Database operations
-├── arduino_bridge.py        # Hardware communication (simulation)
-├── requirements.txt         # Python dependencies
-├── .gitignore              # Git ignore rules
-└── README.md               # This file
+│   ├── /css             # StylesheetsAPI
+│   └── /js
+│       ├── /api         # API Client
+│       ├── /modules     # Reusable UI modules
+│       ├── /pages       # Page-specific logic
+│       └── main.js      # Entry point
+├── /templates           # HTML Templates
+├── /database            # Schema and SQLite DB
+├── /tests               # Pytest suite
+├── app.py               # Application entry point
+├── camera.py            # Vision processing
+├── db_helper.py         # Database utilities
+└── requirements.txt     # Dependencies
 ```
 
 ---
 
 ## 🔌 API Endpoints
 
-| Endpoint      | Method | Description             |
-| ------------- | ------ | ----------------------- |
-| `/`           | GET    | Dashboard page          |
-| `/enroll`     | GET    | Student enrollment page |
-| `/api/health` | GET    | Health check endpoint   |
+| Endpoint                | Method | Description                               |
+| :---------------------- | :----- | :---------------------------------------- |
+| `/api/students`         | GET    | List all students                         |
+| `/api/enroll`           | POST   | Enroll a new student                      |
+| `/api/attendance/today` | GET    | Get today's attendance (supports filters) |
+| `/api/statistics`       | GET    | Get system stats (supports filters)       |
 
 ---
 
-## 🛠️ Development
+## 🧪 Testing
 
-### Testing Individual Modules
+This project uses **pytest** for Test-Driven Development (TDD).
 
 ```powershell
-# Test camera module
-python camera.py
+# Run all tests
+pytest
 
-# Test database module
-python db_helper.py
-
-# Test Arduino bridge (simulation mode)
-python arduino_bridge.py
+# Run specific test file
+pytest tests/test_db.py
+pytest tests/test_api.py
 ```
-
-### Common Issues
-
-**dlib installation fails:**
-
-- Ensure you are using the correct wheel URL for your Python version
-- Make sure your virtual environment is activated
-- If the wheel architecture (amd64) matches your system
-
-**Camera not working:**
-
-- Check that no other application is using the webcam
-- Try changing `camera_index` in `Camera()` constructor
 
 ---
 

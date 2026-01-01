@@ -20,6 +20,30 @@
       </header>
 
       <main>
+        <section class="filter-section">
+          <h2>⚙️ Session Configuration</h2>
+          <div class="filters">
+            <div class="filter-group">
+              <label for="filter-level">Level</label>
+              <select id="filter-level">
+                <option value="">All Levels</option>
+                <option value="100">100 Level</option>
+                <option value="200">200 Level</option>
+                <option value="300">300 Level</option>
+                <option value="400">400 Level</option>
+                <option value="500">500 Level</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filter-course">Course</label>
+              <select id="filter-course">
+                <option value="">All Courses</option>
+                <!-- populated dynamically -->
+              </select>
+            </div>
+          </div>
+        </section>
+
         <section class="camera-section">
           <h2>📸 Live Camera Feed</h2>
           <div class="camera-container">
@@ -80,6 +104,9 @@
       </footer>
     </div>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/main.js') }}"
+    ></script>
   </body>
 </html>

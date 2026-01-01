@@ -7,9 +7,11 @@ PRAGMA foreign_keys = ON;
 -- Students table
 CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id TEXT UNIQUE NOT NULL,
+    student_id TEXT UNIQUE NOT NULL, -- Generic ID, can be Matric Number e.g. 125/22/1/0178
     name TEXT NOT NULL,
     email TEXT,
+    level TEXT,         -- e.g. "400"
+    courses TEXT,       -- JSON array of course codes e.g. '["MTE411", "MTE412"]'
     face_encoding BLOB,  -- Serialized face encoding data
     created_at TEXT NOT NULL,
     updated_at TEXT
@@ -24,6 +26,8 @@ CREATE TABLE IF NOT EXISTS attendance (
     student_id TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     status TEXT DEFAULT 'present' CHECK(status IN ('present', 'late', 'absent')),
+    course_code TEXT,   -- e.g. "MTE411"
+    level TEXT,         -- e.g. "400" (Level at time of attendance)
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
 );
 

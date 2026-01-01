@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 # Uncomment when face_recognition is installed
-# import face_recognition
+import face_recognition
 
 
 class Camera:
