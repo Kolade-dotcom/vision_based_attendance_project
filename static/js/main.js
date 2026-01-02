@@ -44,11 +44,9 @@ function startCameraFeed(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
+  // Clear container and ensure full height/width without padding
   container.innerHTML = `
-        <video id="video-${containerId}" autoplay playsinline></video>
-        <p style="color: rgba(255,255,255,0.6); margin-top: 10px;">
-            Camera active - Connect to /video_feed for live stream
-        </p>
+        <video id="video-${containerId}" autoplay playsinline class="w-full h-full object-cover rounded-lg"></video>
     `;
 
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -58,20 +56,15 @@ function startCameraFeed(containerId) {
         const video = document.getElementById(`video-${containerId}`);
         if (video) {
           video.srcObject = stream;
-          video.style.width = "100%";
-          video.style.height = "auto";
-          video.style.borderRadius = "10px";
         }
       })
       .catch(function (err) {
         console.error("Error accessing camera:", err);
         container.innerHTML = `
-                    <p style="color: #ff6b6b;">
-                        ⚠️ Camera access denied or unavailable
-                    </p>
-                    <p style="color: rgba(255,255,255,0.6);">
-                        Please allow camera access to use this feature
-                    </p>
+                    <div class="flex flex-col items-center justify-center h-full text-center p-4">
+                        <p class="text-red-500 font-medium mb-1">⚠️ Camera Error</p>
+                        <p class="text-xs text-slate-500">Access denied or unavailable</p>
+                    </div>
                 `;
       });
   }

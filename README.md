@@ -16,16 +16,20 @@ A Flask-based attendance system using **computer vision** and **face recognition
 
 ## ✨ Features
 
-- 📸 **Real-time Face Detection**: Automated attendance marking via webcam.
-- 👤 **Student Enrollment**:
-  - **Matric Number** support (e.g., `125/22/1/0178`).
-  - **Level** selection (100-500).
-  - **Course** registration (Enroll in specific courses).
+- � **Secure Authentication**:
+  - Admin Login & Signup system.
+  - Protected Dashboard and Enrollment routes.
+  - Session-based access control.
+- �📸 **Real-time Face Detection**: Automated attendance marking via webcam.
+- 👤 **Student Management**:
+  - **Enrollment**: Capture face data and details.
+  - **Edit Profiles**: Update Name, Level, and **Matric Number** (with cascade updates).
+  - **Delete**: Remove students and their history.
 - 📊 **Dashboard & Analytics**:
   - Real-time attendance table.
   - Filter statistics by **Level** and **Course**.
 - 🔌 **Hardware Integration**: Arduino bridge for LEDs, buzzers, and door control.
-- 💾 **SQLite Database**: Persistent storage for students and attendance logs.
+- 💾 **SQLite Database**: Persistent storage for students (`students` table), attendance logs (`attendance` table), and admin accounts (`users` table).
 
 ---
 
@@ -71,7 +75,7 @@ pip install -r requirements.txt
 
 ### Step 4: Initialize the Database
 
-The application auto-initializes the database on first run, or you can force it:
+The application auto-initializes the database on first run. To force initialization (or reset):
 
 ```powershell
 python -c "from db_helper import init_database; init_database()"
@@ -98,7 +102,7 @@ Open your browser and navigate to: **http://localhost:5000**
 ```
 /vision_attendance_project
 ├── /api
-│   ├── /controllers     # Business logic
+│   ├── /controllers     # Business logic (Auth, Student, Attendance)
 │   └── /routes          # API endpoints (Blueprints)
 ├── /static
 │   ├── /css             # StylesheetsAPI
@@ -107,7 +111,7 @@ Open your browser and navigate to: **http://localhost:5000**
 │       ├── /modules     # Reusable UI modules
 │       ├── /pages       # Page-specific logic
 │       └── main.js      # Entry point
-├── /templates           # HTML Templates
+├── /templates           # HTML Templates (Base, Index, Enroll, Login)
 ├── /database            # Schema and SQLite DB
 ├── /tests               # Pytest suite
 ├── app.py               # Application entry point
@@ -120,10 +124,27 @@ Open your browser and navigate to: **http://localhost:5000**
 
 ## 🔌 API Endpoints
 
+### Authentication
+
+| Endpoint           | Method | Description                       |
+| :----------------- | :----- | :-------------------------------- |
+| `/api/auth/login`  | POST   | Authenticate user & start session |
+| `/api/auth/signup` | POST   | Create new Admin account          |
+| `/api/auth/logout` | GET    | End session                       |
+
+### Students
+
+| Endpoint             | Method | Description                      |
+| :------------------- | :----- | :------------------------------- |
+| `/api/students`      | GET    | List all students                |
+| `/api/enroll`        | POST   | Enroll a new student             |
+| `/api/students/<id>` | PUT    | Update student (Name, Level, ID) |
+| `/api/students/<id>` | DELETE | Delete student                   |
+
+### Attendance
+
 | Endpoint                | Method | Description                               |
 | :---------------------- | :----- | :---------------------------------------- |
-| `/api/students`         | GET    | List all students                         |
-| `/api/enroll`           | POST   | Enroll a new student                      |
 | `/api/attendance/today` | GET    | Get today's attendance (supports filters) |
 | `/api/statistics`       | GET    | Get system stats (supports filters)       |
 

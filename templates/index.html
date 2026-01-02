@@ -1,112 +1,214 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smart Attendance System - Dashboard</title>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/style.css') }}"
-    />
-  </head>
-  <body>
-    <div class="container">
-      <header>
-        <h1>🎯 Smart Vision-Based Attendance System</h1>
-        <nav>
-          <a href="/" class="nav-link active">Dashboard</a>
-          <a href="/enroll" class="nav-link">Enroll Student</a>
-        </nav>
-      </header>
+{% extends "base.html" %} {% block title %}Dashboard - Lumina{% endblock %} {%
+block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-slate-900">
+        Dashboard
+      </h1>
+      <p class="text-slate-500">
+        Monitor live attendance and daily statistics.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span
+        class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20"
+      >
+        System Online
+      </span>
+    </div>
+  </div>
 
-      <main>
-        <section class="filter-section">
-          <h2>⚙️ Session Configuration</h2>
-          <div class="filters">
-            <div class="filter-group">
-              <label for="filter-level">Level</label>
-              <select id="filter-level">
-                <option value="">All Levels</option>
-                <option value="100">100 Level</option>
-                <option value="200">200 Level</option>
-                <option value="300">300 Level</option>
-                <option value="400">400 Level</option>
-                <option value="500">500 Level</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="filter-course">Course</label>
-              <select id="filter-course">
-                <option value="">All Courses</option>
-                <!-- populated dynamically -->
-              </select>
-            </div>
-          </div>
-        </section>
-
-        <section class="camera-section">
-          <h2>📸 Live Camera Feed</h2>
-          <div class="camera-container">
-            <div id="camera-feed" class="camera-placeholder">
-              <p>Camera feed will appear here</p>
-              <button id="start-camera" class="btn btn-primary">
-                Start Camera
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section class="attendance-section">
-          <h2>📋 Today's Attendance</h2>
-          <div id="attendance-list" class="attendance-list">
-            <table>
-              <thead>
-                <tr>
-                  <th>Student ID</th>
-                  <th>Name</th>
-                  <th>Time</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="attendance-tbody">
-                <!-- Attendance records will be populated here -->
-                <tr>
-                  <td colspan="4" class="empty-message">
-                    No attendance records yet today
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="stats-section">
-          <h2>📊 Statistics</h2>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <span class="stat-number" id="total-present">0</span>
-              <span class="stat-label">Present Today</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="total-late">0</span>
-              <span class="stat-label">Late Today</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="total-students">0</span>
-              <span class="stat-label">Total Students</span>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <footer>
-        <p>&copy; 2025 Smart Attendance System - Mechatronics Project</p>
-      </footer>
+  <!-- Statistics Cards -->
+  <div class="grid gap-4 md:grid-cols-3">
+    <!-- Present Card -->
+    <div
+      class="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm"
+    >
+      <div
+        class="p-6 flex flex-row items-center justify-between space-y-0 pb-2"
+      >
+        <h3 class="tracking-tight text-sm font-medium">Present Today</h3>
+        <i data-lucide="users" class="h-4 w-4 text-slate-500"></i>
+      </div>
+      <div class="p-6 pt-0">
+        <div class="text-2xl font-bold" id="total-present">0</div>
+        <p class="text-xs text-slate-500">Students marked present</p>
+      </div>
     </div>
 
-    <script
-      type="module"
-      src="{{ url_for('static', filename='js/main.js') }}"
-    ></script>
-  </body>
-</html>
+    <!-- Late Card -->
+    <div
+      class="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm"
+    >
+      <div
+        class="p-6 flex flex-row items-center justify-between space-y-0 pb-2"
+      >
+        <h3 class="tracking-tight text-sm font-medium">Late Arrivals</h3>
+        <i data-lucide="clock" class="h-4 w-4 text-slate-500"></i>
+      </div>
+      <div class="p-6 pt-0">
+        <div class="text-2xl font-bold" id="total-late">0</div>
+        <p class="text-xs text-slate-500">Students marked late</p>
+      </div>
+    </div>
+
+    <!-- Total Students Card -->
+    <div
+      class="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm"
+    >
+      <div
+        class="p-6 flex flex-row items-center justify-between space-y-0 pb-2"
+      >
+        <h3 class="tracking-tight text-sm font-medium">Total Students</h3>
+        <i data-lucide="graduation-cap" class="h-4 w-4 text-slate-500"></i>
+      </div>
+      <div class="p-6 pt-0">
+        <div class="text-2xl font-bold" id="total-students">0</div>
+        <p class="text-xs text-slate-500">Registered in system</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+    <!-- Camera Feed Section (Takes up 4 cols on large screens) -->
+    <div
+      class="col-span-4 rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm"
+    >
+      <div class="flex flex-col space-y-1.5 p-6">
+        <h3 class="font-semibold leading-none tracking-tight">
+          Live Camera Feed
+        </h3>
+        <p class="text-sm text-slate-500">
+          Real-time monitoring for automatic attendance.
+        </p>
+      </div>
+      <div class="p-6 pt-0">
+        <div
+          class="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center"
+        >
+          <div
+            id="camera-feed"
+            class="w-full h-full flex flex-col items-center justify-center"
+          >
+            <i
+              data-lucide="camera-off"
+              class="h-10 w-10 text-slate-400 mb-2"
+            ></i>
+            <p class="text-sm text-slate-500">Camera is currently inactive</p>
+            <button
+              id="start-camera"
+              class="mt-4 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-slate-900 text-slate-50 hover:bg-slate-900/90 h-10 px-4 py-2"
+            >
+              Start Camera
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters Section (Takes up 3 cols on large screens) -->
+    <div
+      class="col-span-3 rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm"
+    >
+      <div class="flex flex-col space-y-1.5 p-6">
+        <h3 class="font-semibold leading-none tracking-tight">
+          Session Configuration
+        </h3>
+        <p class="text-sm text-slate-500">
+          Select course to filter attendance.
+        </p>
+      </div>
+      <div class="p-6 pt-0 space-y-4">
+        <div class="space-y-2">
+          <label
+            class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            for="course-combobox"
+            >Course</label
+          >
+          <div id="course-combobox"></div>
+        </div>
+
+        <div class="pt-4">
+          <div class="rounded-lg bg-blue-50 p-4">
+            <div class="flex">
+              <i data-lucide="info" class="h-5 w-5 text-blue-400 shrink-0"></i>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">Note</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                  <p>
+                    Ensure the camera captures students clearly. Attendance is
+                    marked automatically.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attendance Table -->
+  <div
+    class="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm"
+  >
+    <div class="flex flex-col space-y-1.5 p-6">
+      <h3 class="font-semibold leading-none tracking-tight">
+        Today's Attendance
+      </h3>
+      <p class="text-sm text-slate-500">
+        List of students marked present for the current session.
+      </p>
+    </div>
+    <div class="p-6 pt-0">
+      <div class="relative w-full overflow-auto">
+        <table class="w-full caption-bottom text-sm">
+          <thead class="[&_tr]:border-b">
+            <tr
+              class="border-b transition-colors hover:bg-slate-100/50 data-[state=selected]:bg-slate-100"
+            >
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Student ID
+              </th>
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Name
+              </th>
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Time
+              </th>
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Status
+              </th>
+            </tr>
+          </thead>
+          <tbody id="attendance-tbody" class="[&_tr:last-child]:border-0">
+            <tr>
+              <td
+                colspan="4"
+                class="h-24 text-center align-middle text-slate-500"
+              >
+                No attendance records yet today
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script
+  type="module"
+  src="{{ url_for('static', filename='js/main.js') }}"
+></script>
+{% endblock %}

@@ -31,11 +31,139 @@ def init_database():
     with open(schema_path, 'r') as f:
         schema = f.read()
     
+    # Add users table schema if not in file (or just execute it here for simplicity since we can't easily edit sql file dynamically and reliably without wiping)
+    # Actually, we should probably append to the schema file or just run the create statement here.
+    users_schema = """
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+
     with get_db_connection() as conn:
         conn.executescript(schema)
+        conn.execute(users_schema)
         conn.commit()
     
     print("Database initialized successfully!")
+
+
+def create_user(email, password_hash, name):
+    """Create a new admin user."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)",
+                (email, password_hash, name)
+            )
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.IntegrityError:
+            return None
+
+def get_user_by_email(email):
+    """Get user by email."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+def update_student(current_student_id, new_student_id, name, level=None, courses=None):
+    """
+    Update student details, including potential ID change.
+    
+    Args:
+        current_student_id (str): The existing ID to find the student.
+        new_student_id (str): The new ID (can be same as current).
+        name (str): New Name
+        level (str, optional): New Level
+        courses (list, optional): New List of course codes
+    """
+    if courses is None:
+        courses = []
+    
+    courses_json = json.dumps(courses)
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # If ID is changing, we need to ensure new ID doesn't exist
+        if current_student_id != new_student_id:
+            cursor.execute("SELECT 1 FROM students WHERE student_id = ?", (new_student_id,))
+            if cursor.fetchone():
+                return False # New ID already exists
+                
+            # Strategy:
+            # 1. Update the student record (We need to disable FK constraints temporarily or use valid approaches)
+            # Since SQLite FK support for ON UPDATE CASCADE is not enabled in our schema,
+            # and disabling FKs is risky, we will use the Clone-Move-Delete approach or try direct update if constraints allow (they usually don't if children exist).
+            
+            # Actually, standard way if PRAGMA foreign_keys = ON:
+            # You cannot update the parent key if children exist.
+            # We must:
+            # 1. Turn off FKs
+            # 2. Update Student
+            # 3. Update Attendance
+            # 4. Turn on FKs
+            
+            try:
+                cursor.execute("PRAGMA foreign_keys=OFF")
+                
+                cursor.execute(
+                    """
+                    UPDATE students 
+                    SET student_id = ?, name = ?, level = ?, courses = ?
+                    WHERE student_id = ?
+                    """,
+                    (new_student_id, name, level, courses_json, current_student_id)
+                )
+                
+                if cursor.rowcount > 0:
+                    cursor.execute(
+                        "UPDATE attendance SET student_id = ? WHERE student_id = ?",
+                        (new_student_id, current_student_id)
+                    )
+                    conn.commit()
+                    return True
+                return False
+            finally:
+                cursor.execute("PRAGMA foreign_keys=ON")
+                
+        else:
+            # Simple update (ID not changing)
+            cursor.execute(
+                """
+                UPDATE students 
+                SET name = ?, level = ?, courses = ?
+                WHERE student_id = ?
+                """,
+                (name, level, courses_json, current_student_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+
+def delete_student(student_id):
+    """
+    Delete a student from the database.
+    
+    Args:
+        student_id (str): Student ID to delete
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # With ON DELETE CASCADE in schema, this might suffice, but explicit is safer
+        cursor.execute("DELETE FROM attendance WHERE student_id = ?", (student_id,))
+        cursor.execute("DELETE FROM students WHERE student_id = ?", (student_id,))
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def add_student(student_id, name, email=None, level=None, courses=None, face_encoding=None):
@@ -197,6 +325,9 @@ def get_statistics(course_code=None, level=None):
             'late_today': late_count,
             'total_students': total_students
         }
+
+
+
 
 if __name__ == '__main__':
     # Test database operations

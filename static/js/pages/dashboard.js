@@ -1,13 +1,13 @@
 import { apiClient } from "../api/client.js";
 import { uiHelpers } from "../modules/ui.js";
+import { Combobox } from "../combobox.js";
 
 /**
  * Initialize Dashboard Page
  */
 export async function initDashboard() {
   const startCameraBtn = document.getElementById("start-camera");
-  const levelSelect = document.getElementById("filter-level");
-  const courseSelect = document.getElementById("filter-course");
+  let courseCombobox;
 
   if (startCameraBtn) {
     startCameraBtn.addEventListener("click", function () {
@@ -15,34 +15,44 @@ export async function initDashboard() {
     });
   }
 
-  // Event listeners for filters
-  if (levelSelect) levelSelect.addEventListener("change", refreshDashboard);
-  if (courseSelect) courseSelect.addEventListener("change", refreshDashboard);
+  // Initialize Course Combobox
+  courseCombobox = new Combobox({
+    containerId: "course-combobox",
+    placeholder: "Select Course...",
+    searchable: true,
+    options: [], // Will be populated
+    onSelect: (value) => refreshDashboard(value),
+  });
 
   // Initial Data Fetch
-  await populateCourseDropdown();
+  await populateCourseDropdown(courseCombobox);
   refreshDashboard();
 }
 
 /**
  * Refresh dashboard data based on filters
  */
-function refreshDashboard() {
-  const level = document.getElementById("filter-level")?.value || "";
-  const course = document.getElementById("filter-course")?.value || "";
+function refreshDashboard(courseValue) {
+  // Use passed value or try to find it (if triggered elsewhere)
+  let course = courseValue || "";
 
-  fetchStatistics(level, course);
-  fetchTodayAttendance(level, course);
+  // If function called without args (initial load), try to get value from combobox hidden input if it exists
+  if (courseValue === undefined) {
+    const hiddenInput = document.querySelector(
+      "#course-combobox input[type=hidden]"
+    );
+    if (hiddenInput) course = hiddenInput.value;
+  }
+
+  fetchStatistics(course);
+  fetchTodayAttendance(course);
 }
 
 /**
  * Fetch and populate course dropdown
  * Uses students data to find unique courses
  */
-async function populateCourseDropdown() {
-  const select = document.getElementById("filter-course");
-  if (!select) return;
-
+async function populateCourseDropdown(comboboxInstance) {
   try {
     const students = await apiClient.getStudents();
     const courses = new Set();
@@ -53,15 +63,11 @@ async function populateCourseDropdown() {
       }
     });
 
-    // Sort and append options
-    Array.from(courses)
+    const options = Array.from(courses)
       .sort()
-      .forEach((code) => {
-        const option = document.createElement("option");
-        option.value = code;
-        option.textContent = code;
-        select.appendChild(option);
-      });
+      .map((code) => ({ value: code, label: code })); // Map to {value, label}
+
+    comboboxInstance.setOptions(options);
   } catch (error) {
     console.error("Error populating courses:", error);
   }
@@ -70,11 +76,9 @@ async function populateCourseDropdown() {
 /**
  * Fetch today's attendance records
  */
-async function fetchTodayAttendance(level, course) {
+async function fetchTodayAttendance(course) {
   try {
-    // Construct query string manually or via URLSearchParams
     const params = new URLSearchParams();
-    if (level) params.append("level", level);
     if (course) params.append("course", course);
 
     const queryString = params.toString();
@@ -93,10 +97,9 @@ async function fetchTodayAttendance(level, course) {
 /**
  * Fetch system statistics
  */
-async function fetchStatistics(level, course) {
+async function fetchStatistics(course) {
   try {
     const params = new URLSearchParams();
-    if (level) params.append("level", level);
     if (course) params.append("course", course);
 
     const queryString = params.toString();

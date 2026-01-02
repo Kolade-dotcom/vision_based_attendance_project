@@ -14,7 +14,7 @@ export const uiHelpers = {
     if (!records || records.length === 0) {
       tbody.innerHTML = `
                 <tr>
-                    <td colspan="4" class="empty-message">No attendance records yet today</td>
+                    <td colspan="4" class="h-24 text-center align-middle text-slate-500">No attendance records yet today</td>
                 </tr>
             `;
       return;
@@ -23,13 +23,21 @@ export const uiHelpers = {
     tbody.innerHTML = records
       .map(
         (record) => `
-          <tr>
-              <td>${record.student_id}</td>
-              <td>${record.student_name}</td>
-              <td>${new Date(record.timestamp).toLocaleTimeString()}</td>
-              <td><span class="status-${record.status}">${
-          record.status
-        }</span></td>
+          <tr class="border-b transition-colors hover:bg-slate-100/50 data-[state=selected]:bg-slate-100">
+              <td class="p-4 align-middle">${record.student_id}</td>
+              <td class="p-4 align-middle font-medium text-slate-900">${
+                record.student_name
+              }</td>
+              <td class="p-4 align-middle">${new Date(
+                record.timestamp
+              ).toLocaleTimeString()}</td>
+              <td class="p-4 align-middle">
+                ${
+                  record.status === "present"
+                    ? `<span class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">Present</span>`
+                    : `<span class="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">${record.status}</span>`
+                }
+              </td>
           </tr>
       `
       )
@@ -46,7 +54,7 @@ export const uiHelpers = {
     if (!students || students.length === 0) {
       tbody.innerHTML = `
               <tr>
-                  <td colspan="4" class="empty-message">No students enrolled yet</td>
+                  <td colspan="4" class="h-24 text-center align-middle text-slate-500">No students enrolled yet</td>
               </tr>
           `;
       return;
@@ -55,11 +63,33 @@ export const uiHelpers = {
     tbody.innerHTML = students
       .map(
         (student) => `
-          <tr>
-              <td>${student.student_id}</td>
-              <td>${student.name}</td>
-              <td>${student.email || "-"}</td>
-              <td>${new Date(student.created_at).toLocaleDateString()}</td>
+          <tr class="border-b transition-colors hover:bg-slate-100/50 data-[state=selected]:bg-slate-100">
+              <td class="p-4 align-middle">${student.student_id}</td>
+              <td class="p-4 align-middle font-medium text-slate-900">${
+                student.name
+              }</td>
+              <td class="p-4 align-middle">${student.level || "-"}</td>
+              <td class="p-4 align-middle">${new Date(
+                student.created_at
+              ).toLocaleDateString()}</td>
+              <td class="p-4 align-middle">
+                <div class="flex items-center gap-2">
+                    <button class="edit-btn inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-slate-100 hover:text-slate-900 h-8 w-8" data-id="${
+                      student.student_id
+                    }" data-name="${student.name}" data-level="${
+          student.level || ""
+        }">
+                        <i data-lucide="pencil" class="h-4 w-4"></i>
+                        <span class="sr-only">Edit</span>
+                    </button>
+                    <button class="delete-btn inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-red-100 hover:text-red-900 h-8 w-8 text-red-600" data-id="${
+                      student.student_id
+                    }">
+                        <i data-lucide="trash-2" class="h-4 w-4"></i>
+                        <span class="sr-only">Delete</span>
+                    </button>
+                </div>
+              </td>
           </tr>
       `
       )

@@ -43,3 +43,40 @@ def get_students_logic():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def update_student_logic(current_student_id, data):
+    """Business logic for updating a student."""
+    if not current_student_id:
+        return jsonify({'error': 'Student ID is required'}), 400
+        
+    try:
+        new_student_id = data.get('student_id', current_student_id) # Default to current if not provided
+        name = data.get('name')
+        level = data.get('level')
+        courses = data.get('courses', [])
+        
+        success = db_helper.update_student(current_student_id, new_student_id, name, level, courses)
+        
+        if success:
+            return jsonify({'status': 'success', 'message': 'Student updated successfully'}), 200
+        else:
+            return jsonify({'error': 'Update failed (Student not found or new ID exists)'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def delete_student_logic(student_id):
+    """Business logic for deleting a student."""
+    if not student_id:
+        return jsonify({'error': 'Student ID is required'}), 400
+        
+    try:
+        success = db_helper.delete_student(student_id)
+        
+        if success:
+            return jsonify({'status': 'success', 'message': 'Student deleted successfully'}), 200
+        else:
+            return jsonify({'error': 'Student not found'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

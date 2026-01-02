@@ -41,4 +41,27 @@ export const apiClient = {
     const response = await fetch("/api/statistics");
     return await response.json();
   },
+  /**
+   * Update student details.
+   */
+  async updateStudent(studentId, data) {
+    const response = await fetch(`/api/students/${studentId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+    return await response.json();
+  },
+
+  /**
+   * Delete a student.
+   */
+  async deleteStudent(studentId) {
+    const response = await fetch(`/api/students/${studentId}`, {
+      method: "DELETE",
+    });
+    return await response.json();
+  },
 };

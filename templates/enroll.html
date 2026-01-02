@@ -1,171 +1,352 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Enroll Student - Smart Attendance System</title>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/style.css') }}"
-    />
-  </head>
-  <body>
-    <div class="container">
-      <header>
-        <h1>🎯 Smart Vision-Based Attendance System</h1>
-        <nav>
-          <a href="/" class="nav-link">Dashboard</a>
-          <a href="/enroll" class="nav-link active">Enroll Student</a>
-        </nav>
-      </header>
+{% extends "base.html" %} {% block title %}Enroll Student - Lumina{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-slate-900">
+        Enroll New Student
+      </h1>
+      <p class="text-slate-500">
+        Register a student and capture their face data.
+      </p>
+    </div>
+  </div>
 
-      <main>
-        <section class="enroll-section">
-          <h2>👤 Enroll New Student</h2>
+  <div class="grid gap-6 lg:grid-cols-2">
+    <!-- Enrollment Form -->
+    <div
+      class="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm"
+    >
+      <div class="flex flex-col space-y-1.5 p-6">
+        <h3 class="font-semibold leading-none tracking-tight">
+          Student Details
+        </h3>
+        <p class="text-sm text-slate-500">
+          Enter the personal information of the student.
+        </p>
+      </div>
 
-          <form id="enroll-form" class="enroll-form">
-            <div class="form-group">
-              <label for="student-id">Matric Number *</label>
+      <div class="p-6 pt-0">
+        <form id="enroll-form" class="space-y-4">
+          <div class="space-y-2">
+            <label
+              for="student-id"
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >Matric Number <span class="text-red-500">*</span></label
+            >
+            <input
+              type="text"
+              id="student-id"
+              name="student_id"
+              required
+              placeholder="e.g., 125/22/1/0178"
+              class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label
+              for="student-name"
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >Full Name <span class="text-red-500">*</span></label
+            >
+            <input
+              type="text"
+              id="student-name"
+              name="name"
+              required
+              placeholder="Enter student's full name"
+              class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label
+              for="student-level"
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >Level <span class="text-red-500">*</span></label
+            >
+            <div id="level-combobox"></div>
+          </div>
+
+          <div class="space-y-2">
+            <label
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >Offered Courses</label
+            >
+            <div class="flex gap-2">
               <input
                 type="text"
-                id="student-id"
-                name="student_id"
-                required
-                placeholder="e.g., 125/22/1/0178"
+                id="course-input"
+                placeholder="e.g. MTE411"
+                class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
-            </div>
-
-            <div class="form-group">
-              <label for="student-name">Full Name *</label>
-              <input
-                type="text"
-                id="student-name"
-                name="name"
-                required
-                placeholder="Enter student's full name"
-              />
-            </div>
-
-            <div class="form-group">
-              <label for="student-level">Level *</label>
-              <select id="student-level" name="level" required>
-                <option value="" disabled selected>Select Level</option>
-                <option value="100">100 Level</option>
-                <option value="200">200 Level</option>
-                <option value="300">300 Level</option>
-                <option value="400">400 Level</option>
-                <option value="500">500 Level</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label>Offered Courses</label>
-              <div class="course-input-group">
-                <input
-                  type="text"
-                  id="course-input"
-                  placeholder="e.g. MTE411"
-                />
-                <button type="button" id="add-course-btn" class="btn btn-sm">
-                  Add
-                </button>
-              </div>
-              <div id="course-list" class="course-list">
-                <!-- Added courses will appear here as tags -->
-              </div>
-              <!-- Hidden input to store courses array JSON -->
-              <input
-                type="hidden"
-                id="courses-data"
-                name="courses"
-                value="[]"
-              />
-            </div>
-
-            <div class="form-group">
-              <label for="student-email">Email</label>
-              <input
-                type="email"
-                id="student-email"
-                name="email"
-                placeholder="student@example.com"
-              />
-            </div>
-
-            <div class="form-group">
-              <label>Face Capture</label>
-              <div class="camera-container">
-                <div id="enroll-camera" class="camera-placeholder">
-                  <p>Camera feed for face capture</p>
-                  <button
-                    type="button"
-                    id="start-enroll-camera"
-                    class="btn btn-secondary"
-                  >
-                    Start Camera
-                  </button>
-                </div>
-              </div>
               <button
                 type="button"
-                id="capture-face"
-                class="btn btn-secondary"
-                disabled
+                id="add-course-btn"
+                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2"
               >
-                📸 Capture Face
-              </button>
-              <p id="capture-status" class="capture-status"></p>
-            </div>
-
-            <div class="form-actions">
-              <button
-                type="submit"
-                class="btn btn-primary"
-                id="enroll-btn"
-                disabled
-              >
-                ✅ Enroll Student
-              </button>
-              <button type="reset" class="btn btn-secondary">
-                🔄 Clear Form
+                Add
               </button>
             </div>
-          </form>
-        </section>
-
-        <section class="students-section">
-          <h2>📋 Enrolled Students</h2>
-          <div id="students-list" class="students-list">
-            <table>
-              <thead>
-                <tr>
-                  <th>Student ID</th>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Enrolled Date</th>
-                </tr>
-              </thead>
-              <tbody id="students-tbody">
-                <!-- Students will be populated here -->
-                <tr>
-                  <td colspan="4" class="empty-message">
-                    No students enrolled yet
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div id="course-list" class="flex flex-wrap gap-2 mt-2">
+              <!-- Added courses will appear here as tags -->
+            </div>
+            <input type="hidden" id="courses-data" name="courses" value="[]" />
           </div>
-        </section>
-      </main>
 
-      <footer>
-        <p>&copy; 2025 Smart Attendance System - Mechatronics Project</p>
-      </footer>
+          <div class="space-y-2">
+            <label
+              for="student-email"
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >Email</label
+            >
+            <input
+              type="email"
+              id="student-email"
+              name="email"
+              placeholder="student@example.com"
+              class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+        </form>
+      </div>
     </div>
 
-    <script
-      type="module"
-      src="{{ url_for('static', filename='js/main.js') }}"
-    ></script>
-  </body>
-</html>
+    <!-- Camera Section -->
+    <div
+      class="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm flex flex-col h-full"
+    >
+      <div class="flex flex-col space-y-1.5 p-6">
+        <h3 class="font-semibold leading-none tracking-tight">Face Capture</h3>
+        <p class="text-sm text-slate-500">
+          Capture the student's face for recognition.
+        </p>
+      </div>
+
+      <div class="p-6 pt-0 flex-1 flex flex-col gap-4">
+        <div
+          class="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center"
+        >
+          <div
+            id="enroll-camera"
+            class="w-full h-full flex flex-col items-center justify-center"
+          >
+            <i data-lucide="camera" class="h-10 w-10 text-slate-400 mb-2"></i>
+            <p class="text-sm text-slate-500">Camera preview</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            id="start-enroll-camera"
+            class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2"
+          >
+            Start Camera
+          </button>
+          <button
+            type="button"
+            id="capture-face"
+            disabled
+            class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2"
+          >
+            Capture Face
+          </button>
+        </div>
+        <p
+          id="capture-status"
+          class="text-sm text-center text-slate-500 h-5"
+        ></p>
+
+        <div class="mt-auto pt-4 border-t border-slate-200 flex gap-2">
+          <button
+            type="submit"
+            form="enroll-form"
+            id="enroll-btn"
+            disabled
+            class="flex-1 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-slate-900 text-slate-50 hover:bg-slate-900/90 h-10 px-4 py-2"
+          >
+            Complete Enrollment
+          </button>
+          <button
+            type="reset"
+            form="enroll-form"
+            class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-3"
+          >
+            <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enrolled Students Table -->
+  <div
+    class="rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm mt-8"
+  >
+    <div class="flex flex-col space-y-1.5 p-6">
+      <h3 class="font-semibold leading-none tracking-tight">
+        Recently Enrolled
+      </h3>
+    </div>
+    <div class="p-6 pt-0">
+      <div class="relative w-full overflow-auto">
+        <table class="w-full caption-bottom text-sm">
+          <thead class="[&_tr]:border-b">
+            <tr
+              class="border-b transition-colors hover:bg-slate-100/50 data-[state=selected]:bg-slate-100"
+            >
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Student ID
+              </th>
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Name
+              </th>
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Email
+              </th>
+              <th
+                class="h-12 px-4 text-left align-middle font-medium text-slate-500"
+              >
+                Enrolled Date
+              </th>
+            </tr>
+          </thead>
+          <tbody id="students-tbody" class="[&_tr:last-child]:border-0">
+            <tr>
+              <td
+                colspan="4"
+                class="h-24 text-center align-middle text-slate-500"
+              >
+                No students enrolled yet
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Student Modal -->
+<div
+  id="edit-modal"
+  class="hidden fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+>
+  <div
+    class="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-slate-200 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg"
+  >
+    <div class="flex flex-col space-y-1.5 text-center sm:text-left">
+      <h2 class="text-lg font-semibold leading-none tracking-tight">
+        Edit Student
+      </h2>
+      <p class="text-sm text-slate-500">
+        Make changes to the student's profile here. Click save when you're done.
+      </p>
+    </div>
+    <form id="edit-form" class="grid gap-4 py-4">
+      <input type="hidden" id="original-student-id" />
+
+      <div class="grid grid-cols-4 items-center gap-4">
+        <label
+          for="edit-student-id"
+          class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+        >
+          Matric No
+        </label>
+        <input
+          id="edit-student-id"
+          class="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
+
+      <div class="grid grid-cols-4 items-center gap-4">
+        <label
+          for="edit-name"
+          class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+        >
+          Name
+        </label>
+        <input
+          id="edit-name"
+          class="col-span-3 flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
+      <!-- Additional fields can be added here if needed -->
+      <div
+        id="edit-level-container"
+        class="grid grid-cols-4 items-center gap-4"
+      >
+        <label class="text-right text-sm font-medium leading-none">Level</label>
+        <div class="col-span-3" id="edit-level-combobox"></div>
+      </div>
+    </form>
+    <div class="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+      <button
+        id="cancel-edit"
+        type="button"
+        class="mt-2 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2 sm:mt-0"
+      >
+        Cancel
+      </button>
+      <button
+        id="save-edit"
+        type="button"
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-slate-900 text-slate-50 hover:bg-slate-900/90 h-10 px-4 py-2"
+      >
+        Save changes
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div
+  id="delete-modal"
+  class="hidden fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+>
+  <div
+    class="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-slate-200 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg"
+  >
+    <div class="flex flex-col space-y-1.5 text-center sm:text-left">
+      <h2 class="text-lg font-semibold leading-none tracking-tight">
+        Are you absolutely sure?
+      </h2>
+      <p class="text-sm text-slate-500">
+        This action cannot be undone. This will permanently delete the student
+        and remove their data from our servers.
+      </p>
+    </div>
+    <div
+      class="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 pt-4"
+    >
+      <button
+        id="cancel-delete"
+        type="button"
+        class="mt-2 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2 sm:mt-0"
+      >
+        Cancel
+      </button>
+      <button
+        id="confirm-delete"
+        type="button"
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-red-600 text-slate-50 hover:bg-red-600/90 h-10 px-4 py-2"
+      >
+        Delete Student
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script
+  type="module"
+  src="{{ url_for('static', filename='js/main.js') }}"
+></script>
+{% endblock %}

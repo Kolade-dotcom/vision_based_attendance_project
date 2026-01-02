@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Lumina - Attendance{% endblock %}</title>
+
+    <!-- Tailwind CSS (via CDN for simplicity as requested) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts: Inter -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+            colors: {
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              ring: "hsl(var(--ring))",
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: {
+                DEFAULT: "#0f172a", // Slate 900
+                foreground: "#f8fafc", // Slate 50
+              },
+              secondary: {
+                DEFAULT: "#f1f5f9", // Slate 100
+                foreground: "#0f172a", // Slate 900
+              },
+              destructive: {
+                DEFAULT: "hsl(var(--destructive))",
+                foreground: "hsl(var(--destructive-foreground))",
+              },
+              muted: {
+                DEFAULT: "#f1f5f9",
+                foreground: "#64748b",
+              },
+              accent: {
+                DEFAULT: "#f1f5f9",
+                foreground: "#0f172a",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style type="text/tailwindcss">
+      @layer base {
+        :root {
+          --background: 0 0% 100%;
+          --foreground: 222.2 84% 4.9%;
+          --card: 0 0% 100%;
+          --card-foreground: 222.2 84% 4.9%;
+          --popover: 0 0% 100%;
+          --popover-foreground: 222.2 84% 4.9%;
+          --primary: 222.2 47.4% 11.2%;
+          --primary-foreground: 210 40% 98%;
+          --secondary: 210 40% 96.1%;
+          --secondary-foreground: 222.2 47.4% 11.2%;
+          --muted: 210 40% 96.1%;
+          --muted-foreground: 215.4 16.3% 46.9%;
+          --accent: 210 40% 96.1%;
+          --accent-foreground: 222.2 47.4% 11.2%;
+          --destructive: 0 84.2% 60.2%;
+          --destructive-foreground: 210 40% 98%;
+          --border: 214.3 31.8% 91.4%;
+          --input: 214.3 31.8% 91.4%;
+          --ring: 222.2 84% 4.9%;
+          --radius: 0.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-white text-slate-950 font-sans antialiased">
+    <div class="flex h-screen overflow-hidden">
+      <!-- Sidebar (Only show if logged in) -->
+      {% if session.get('user_id') %}
+      <aside
+        class="w-64 border-r border-slate-200 bg-white hidden md:flex flex-col"
+      >
+        <div class="p-6">
+          <div class="flex items-center gap-2">
+            <div
+              class="h-8 w-8 rounded-lg bg-slate-900 flex items-center justify-center text-white"
+            >
+              <i data-lucide="scan-face" class="h-5 w-5"></i>
+            </div>
+            <span class="text-xl font-bold tracking-tight text-slate-900"
+              >Lumina</span
+            >
+          </div>
+        </div>
+
+        <nav class="flex-1 px-4 space-y-1">
+          <a
+            href="/"
+            class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md {% if request.path == '/' %}bg-slate-100 text-slate-900{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %} transition-colors"
+          >
+            <i data-lucide="layout-dashboard" class="h-4 w-4"></i>
+            Dashboard
+          </a>
+          <a
+            href="/enroll"
+            class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md {% if request.path == '/enroll' %}bg-slate-100 text-slate-900{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %} transition-colors"
+          >
+            <i data-lucide="user-plus" class="h-4 w-4"></i>
+            Enroll Student
+          </a>
+
+          <div class="pt-4 mt-4 border-t border-slate-100">
+            <a
+              href="/api/auth/logout"
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
+            >
+              <i data-lucide="log-out" class="h-4 w-4"></i>
+              Sign Out
+            </a>
+          </div>
+        </nav>
+
+        <div class="p-4 border-t border-slate-200">
+          <div class="flex items-center gap-3">
+            <div
+              class="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center"
+            >
+              <i data-lucide="user" class="h-4 w-4 text-slate-600"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-slate-900 truncate">
+                {{ session.get('user_name', 'Admin User') }}
+              </p>
+              <p class="text-xs text-slate-500 truncate">
+                {{ session.get('user_email', 'admin@lumina.edu') }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </aside>
+      {% endif %}
+
+      <!-- Main Content -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Mobile Header -->
+        <header
+          class="md:hidden border-b border-slate-200 bg-white p-4 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <div
+              class="h-8 w-8 rounded-lg bg-slate-900 flex items-center justify-center text-white"
+            >
+              <i data-lucide="scan-face" class="h-5 w-5"></i>
+            </div>
+            <span class="text-lg font-bold text-slate-900">Lumina</span>
+          </div>
+          <!-- Simple mobile menu placeholder - can be expanded if needed -->
+          <button class="text-slate-600">
+            <i data-lucide="menu" class="h-6 w-6"></i>
+          </button>
+        </header>
+
+        <main class="flex-1 overflow-y-auto bg-white p-6 md:p-8">
+          <div class="max-w-6xl mx-auto space-y-8">
+            {% block content %}{% endblock %}
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div
+      id="toast-container"
+      class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
+    ></div>
+
+    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script>
+      // Initialize Lucide icons
+      lucide.createIcons();
+    </script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

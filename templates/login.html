@@ -1,0 +1,155 @@
+{% extends "base.html" %} {% block title %}Login - Lumina{% endblock %} {% block
+content %}
+<div class="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+  <div class="w-full max-w-sm space-y-6">
+    <div class="flex flex-col items-center gap-2 text-center">
+      <div
+        class="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center text-white"
+      >
+        <i data-lucide="scan-face" class="h-6 w-6"></i>
+      </div>
+      <h1 class="text-2xl font-bold tracking-tight text-slate-900">
+        Welcome back
+      </h1>
+      <p class="text-sm text-slate-500">
+        Enter your credentials to access the system.
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form id="auth-form" class="space-y-4">
+        <div class="space-y-2">
+          <label
+            for="email"
+            class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >Email</label
+          >
+          <input
+            type="email"
+            id="email"
+            required
+            class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder="admin@lumina.edu"
+          />
+        </div>
+        <div class="space-y-2">
+          <label
+            for="password"
+            class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >Password</label
+          >
+          <input
+            type="password"
+            id="password"
+            required
+            class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </div>
+
+        <!-- Hidden name field for signup mode -->
+        <div id="name-container" class="space-y-2 hidden">
+          <label
+            for="name"
+            class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >Full Name</label
+          >
+          <input
+            type="text"
+            id="name"
+            class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </div>
+
+        <div
+          id="error-message"
+          class="text-sm text-red-500 hidden text-center"
+        ></div>
+
+        <button
+          type="submit"
+          id="submit-btn"
+          class="inline-flex w-full items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-slate-50 hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 transition-colors"
+        >
+          Sign In
+        </button>
+      </form>
+
+      <div class="mt-4 text-center text-sm">
+        <span id="toggle-text" class="text-slate-500"
+          >Don't have an account?</span
+        >
+        <button
+          type="button"
+          id="toggle-auth"
+          class="font-medium text-slate-900 hover:underline underline-offset-4"
+        >
+          Sign up
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  const form = document.getElementById("auth-form");
+  const toggleBtn = document.getElementById("toggle-auth");
+  const nameContainer = document.getElementById("name-container");
+  const submitBtn = document.getElementById("submit-btn");
+  const errorMsg = document.getElementById("error-message");
+  const toggleText = document.getElementById("toggle-text");
+
+  let isLogin = true;
+
+  toggleBtn.addEventListener("click", () => {
+    isLogin = !isLogin;
+    if (isLogin) {
+      nameContainer.classList.add("hidden");
+      submitBtn.textContent = "Sign In";
+      toggleText.textContent = "Don't have an account?";
+      toggleBtn.textContent = "Sign up";
+    } else {
+      nameContainer.classList.remove("hidden");
+      submitBtn.textContent = "Create Account";
+      toggleText.textContent = "Already have an account?";
+      toggleBtn.textContent = "Sign in";
+    }
+    errorMsg.classList.add("hidden");
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorMsg.classList.add("hidden");
+    submitBtn.disabled = true;
+
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    const name = document.getElementById("name").value;
+
+    const endpoint = isLogin ? "/api/auth/login" : "/api/auth/signup";
+    const body = isLogin ? { email, password } : { email, password, name };
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        window.location.href = "/";
+      } else {
+        errorMsg.textContent = data.error || "Authentication failed";
+        errorMsg.classList.remove("hidden");
+        submitBtn.disabled = false;
+      }
+    } catch (err) {
+      console.error(err);
+      errorMsg.textContent = "Network error. Please try again.";
+      errorMsg.classList.remove("hidden");
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+{% endblock %}
