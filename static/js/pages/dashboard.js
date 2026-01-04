@@ -6,27 +6,75 @@ import { Combobox } from "../combobox.js";
  * Initialize Dashboard Page
  */
 export async function initDashboard() {
-  const startCameraBtn = document.getElementById("start-camera");
-  let courseCombobox;
+  console.log("Initializing Dashboard...");
+  try {
+    const startCameraBtn = document.getElementById("start-camera");
+    const startSessionBtn = document.getElementById("start-session-btn");
+    const endSessionBtn = document.getElementById("end-session-btn");
+    let courseCombobox;
+    let sessionTimerInterval;
+    let datePickerInstance;
 
-  if (startCameraBtn) {
-    startCameraBtn.addEventListener("click", function () {
-      console.log("Starting dashboard camera...");
+    if (startSessionBtn) {
+      startSessionBtn.addEventListener("click", () =>
+        startSession(courseCombobox)
+      );
+    }
+
+    // Global references for camera management
+    window.dashboardState = {
+      isCameraRunning: false,
+    };
+
+    if (endSessionBtn) {
+      endSessionBtn.addEventListener("click", () => endSession());
+    }
+
+    // Initialize Course Combobox
+    console.log("Initializing Combobox...");
+    courseCombobox = new Combobox({
+      containerId: "course-combobox",
+      placeholder: "Select Course...",
+      searchable: true,
+      options: [], // Will be populated
+      onSelect: (value) => {
+        refreshDashboard(value);
+        validateStartSession();
+      },
     });
+
+    // Initialize Flatpickr (Date Time Picker)
+    datePickerInstance = flatpickr("#scheduled-start", {
+      enableTime: true,
+      dateFormat: "Y-m-d H:i",
+      time_24hr: true,
+      minuteIncrement: 5,
+      allowInput: true,
+      altInput: true,
+      altFormat: "F j, Y at h:i K", // e.g. January 4, 2026 at 10:30 PM
+      clickOpens: true,
+      onChange: () => validateStartSession(),
+      // Optional: Can add defaultDate or minDate: "today"
+    });
+
+    // Initial validation check
+    validateStartSession();
+
+    // Initial Data Fetch
+    await populateCourseDropdown(courseCombobox);
+    await checkActiveSession();
+    loadSessionHistory();
+    refreshDashboard();
+    console.log("Dashboard Initialized successfully");
+  } catch (error) {
+    console.error("Dashboard Initialization Failed:", error);
+    if (window.showToast)
+      window.showToast(
+        "System Error",
+        "Failed to load dashboard components.",
+        "error"
+      );
   }
-
-  // Initialize Course Combobox
-  courseCombobox = new Combobox({
-    containerId: "course-combobox",
-    placeholder: "Select Course...",
-    searchable: true,
-    options: [], // Will be populated
-    onSelect: (value) => refreshDashboard(value),
-  });
-
-  // Initial Data Fetch
-  await populateCourseDropdown(courseCombobox);
-  refreshDashboard();
 }
 
 /**
@@ -115,5 +163,325 @@ async function fetchStatistics(course) {
     uiHelpers.updateStatistic("total-students", stats.total_students);
   } catch (error) {
     console.error("Error fetching statistics:", error);
+  }
+}
+
+// --- Session Management ---
+
+function validateStartSession() {
+  const startBtn = document.getElementById("start-session-btn");
+  const hiddenInput = document.querySelector(
+    "#course-combobox input[type=hidden]"
+  );
+  const dateInput = document.getElementById("scheduled-start");
+
+  const courseSelected = hiddenInput && hiddenInput.value;
+  const dateSelected = dateInput && dateInput.value;
+
+  if (startBtn) {
+    if (courseSelected && dateSelected) {
+      startBtn.disabled = false;
+      startBtn.classList.remove("opacity-50", "pointer-events-none");
+    } else {
+      startBtn.disabled = true;
+      startBtn.classList.add("opacity-50", "pointer-events-none");
+    }
+  }
+}
+
+async function checkActiveSession() {
+  try {
+    // Check if there is any active session globally (or we could filter by selected course if we enforced course selection first)
+    // For now, let's just check global active or try to get it.
+    // If the API supports filtering by course, we might need to know the course first.
+    // Assuming single global active session for the lecturer context or per-course.
+    // Let's call basic active endpoint.
+    const response = await fetch("/api/sessions/active");
+    const data = await response.json();
+
+    if (response.ok && data.id) {
+      updateSessionUI(data);
+      startCamera(); // Auto-start camera if session is active
+    } else {
+      resetSessionUI();
+    }
+  } catch (e) {
+    console.error("Error checking active session", e);
+  }
+}
+
+async function startSession(courseCombobox) {
+  const hiddenInput = document.querySelector(
+    "#course-combobox input[type=hidden]"
+  );
+  const courseCode = hiddenInput ? hiddenInput.value : null;
+  const scheduledStart = document.getElementById("scheduled-start").value;
+
+  if (!courseCode) {
+    showToast("Input Required", "Please select a course first.", "error");
+    return;
+  }
+
+  if (!scheduledStart) {
+    showToast(
+      "Input Required",
+      "Please select a scheduled start time.",
+      "error"
+    );
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/sessions/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        course_code: courseCode,
+        scheduled_start: scheduledStart,
+      }),
+    });
+
+    const result = await response.json();
+    if (response.ok) {
+      updateSessionUI(result); // result might need to look like full session object or we re-fetch
+      checkActiveSession(); // Re-fetch to be sure
+      loadSessionHistory();
+      startCamera();
+      showToast(
+        "Session Started",
+        `Monitoring attendance for ${result.course_code}`,
+        "success"
+      );
+    } else {
+      showToast("Error", "Error starting session: " + result.error, "error");
+    }
+  } catch (e) {
+    console.error(e);
+    showToast("Error", "Failed to start session", "error");
+  }
+}
+
+async function endSession() {
+  const endBtn = document.getElementById("end-session-btn");
+  const sessionId = endBtn.dataset.sessionId;
+
+  if (!sessionId) return;
+
+  // Show Modal
+  const modal = document.getElementById("end-session-modal");
+  const backdrop = document.getElementById("modal-backdrop");
+  const panel = document.getElementById("modal-panel");
+  const confirmBtn = document.getElementById("confirm-end-session");
+  const cancelBtn = document.getElementById("cancel-end-session");
+
+  if (!modal) return;
+
+  // Open Modal logic
+  modal.classList.remove("hidden");
+  // Animation delay
+  requestAnimationFrame(() => {
+    backdrop.dataset.state = "open";
+    panel.dataset.state = "open";
+  });
+
+  // Handle Confirm
+  const handleConfirm = async () => {
+    try {
+      const response = await fetch("/api/sessions/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+
+      if (response.ok) {
+        resetSessionUI();
+        loadSessionHistory();
+        stopCamera();
+        showToast("Session Ended", "Attendance session closed.", "default");
+        closeModal();
+      } else {
+        const data = await response.json();
+        showToast(
+          "Error",
+          "Error ending session: " + (data.error || "Unknown error"),
+          "error"
+        );
+        closeModal(); // Optional: keep open on error? No, better to close.
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Error", "Failed to process request", "error");
+      closeModal();
+    }
+  };
+
+  // Handle Close
+  const closeModal = () => {
+    backdrop.dataset.state = "closed";
+    panel.dataset.state = "closed";
+    setTimeout(() => {
+      modal.classList.add("hidden");
+      // cleanup listeners to avoid duplicates if opened again without reload (though wrapper approach avoids this usually, let's safe guard)
+      confirmBtn.removeEventListener("click", onConfirmClick);
+      cancelBtn.removeEventListener("click", onCancelClick);
+    }, 200);
+  };
+
+  // Event Listeners (One-time wrapper)
+  const onConfirmClick = () => handleConfirm();
+  const onCancelClick = () => closeModal();
+
+  confirmBtn.onclick = onConfirmClick; // Simple assignment to overwrite previous if any
+  cancelBtn.onclick = onCancelClick;
+}
+
+let timerInterval;
+
+function startCamera() {
+  if (window.dashboardState.isCameraRunning) return;
+
+  const feedContainer = document.getElementById("camera-feed");
+  const placeholder = document.getElementById("camera-placeholder");
+
+  if (placeholder) placeholder.classList.add("hidden");
+
+  // Check if image already exists
+  let img = feedContainer.querySelector("img");
+  if (!img) {
+    img = document.createElement("img");
+    img.src = "/video_feed"; // Assuming this route exists or will be created
+    img.className = "w-full h-full object-cover rounded-lg";
+    img.alt = "Live Camera Feed";
+    feedContainer.appendChild(img);
+  } else {
+    img.classList.remove("hidden");
+    img.src = "/video_feed?t=" + new Date().getTime(); // Refresh src to restart stream
+  }
+
+  window.dashboardState.isCameraRunning = true;
+}
+
+function stopCamera() {
+  const feedContainer = document.getElementById("camera-feed");
+  const placeholder = document.getElementById("camera-placeholder");
+
+  const img = feedContainer.querySelector("img");
+  if (img) {
+    // Stop stream by removing src or removing element. Removing element is cleaner for MJPEG.
+    img.remove();
+    // Or img.src = ""; img.classList.add("hidden");
+  }
+
+  if (placeholder) placeholder.classList.remove("hidden");
+  window.dashboardState.isCameraRunning = false;
+}
+
+function updateSessionUI(session) {
+  // Show Session Overlay
+  const overlay = document.getElementById("session-overlay");
+  const activeSessionInfo = document.getElementById("active-session-info");
+  const activeCard = document.getElementById("active-session-card"); // Check if this still exists (we removed it from HTML but check for safety)
+
+  if (overlay) {
+    overlay.classList.remove("hidden");
+    // Small delay to allow display block to apply before opacity transition
+    requestAnimationFrame(() => {
+      overlay.dataset.state = "visible";
+    });
+
+    activeSessionInfo.textContent = `${session.course_code}`; // Simplified text
+
+    const sessionCard = document.getElementById("active-session-card");
+    if (sessionCard)
+      sessionCard.dataset.sessionId = session.id || session.session_id;
+
+    // Store session ID on overlay end button or global
+    const endBtn = document.getElementById("end-session-btn");
+    if (endBtn) endBtn.dataset.sessionId = session.id || session.session_id;
+  }
+
+  // Previous UI code (can be removed or adapted if we fully switched)
+  if (activeCard) activeCard.classList.add("hidden"); // Ensure old card is hidden if it exists
+
+  // Force dashboard to show this session's context
+  refreshDashboard(session.course_code);
+
+  // Start Timer
+  if (timerInterval) clearInterval(timerInterval);
+  const startTime = new Date(session.start_time).getTime();
+
+  timerInterval = setInterval(() => {
+    const now = new Date().getTime();
+    const diff = now - startTime;
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    const timerDisplay = document.getElementById("session-timer");
+    if (timerDisplay) {
+      timerDisplay.textContent = `${String(hours).padStart(2, "0")}:${String(
+        minutes
+      ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+  }, 1000);
+}
+
+function resetSessionUI() {
+  const overlay = document.getElementById("session-overlay");
+  if (overlay) {
+    overlay.dataset.state = "closed";
+    setTimeout(() => {
+      overlay.classList.add("hidden");
+    }, 300); // Wait for transition
+  }
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  const timerDisplay = document.getElementById("session-timer");
+  if (timerDisplay) timerDisplay.textContent = "00:00:00";
+}
+
+async function loadSessionHistory() {
+  try {
+    const response = await fetch("/api/sessions/history");
+    const history = await response.json();
+
+    const tbody = document.getElementById("session-history-tbody");
+    tbody.innerHTML = "";
+
+    if (history.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="5" class="h-24 text-center align-middle text-slate-500">No past sessions found</td></tr>';
+      return;
+    }
+
+    history.forEach((session) => {
+      const tr = document.createElement("tr");
+      tr.className = "border-b transition-colors hover:bg-slate-100/50";
+
+      const start = new Date(session.start_time).toLocaleString();
+      const end = session.end_time
+        ? new Date(session.end_time).toLocaleString()
+        : "Active";
+      const scheduled = session.scheduled_start
+        ? new Date(session.scheduled_start).toLocaleString()
+        : "N/A";
+
+      tr.innerHTML = `
+                <td class="p-4 align-middle">${session.course_code}</td>
+                <td class="p-4 align-middle">${scheduled}</td>
+                <td class="p-4 align-middle">${start}</td>
+                <td class="p-4 align-middle">${end}</td>
+                <td class="p-4 align-middle">
+                    <a href="/api/sessions/${session.id}/export" target="_blank" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
+                        Export CSV
+                    </a>
+                </td>
+            `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    console.error("Error loading history", e);
   }
 }

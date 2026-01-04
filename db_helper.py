@@ -48,7 +48,96 @@ def init_database():
         conn.execute(users_schema)
         conn.commit()
     
+    
+    # Create sessions table
+    sessions_schema = """
+    CREATE TABLE IF NOT EXISTS class_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_code TEXT NOT NULL,
+        scheduled_start TEXT,
+        start_time TEXT NOT NULL,
+        end_time TEXT,
+        is_active INTEGER DEFAULT 1
+    );
+    """
+    
+    with get_db_connection() as conn:
+        conn.executescript(schema)
+        conn.execute(users_schema)
+        conn.execute(sessions_schema)
+        
+        # Check if session_id exists in attendance table, if not add it
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(attendance)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if 'session_id' not in columns:
+            try:
+                conn.execute("ALTER TABLE attendance ADD COLUMN session_id INTEGER")
+            except sqlite3.OperationalError:
+                pass # Already exists
+                
+        conn.commit()
+    
     print("Database initialized successfully!")
+
+def create_session(course_code, scheduled_start):
+    """
+    Start a new class session.
+    Ensures only one active session per course exists (or potentially global, but requirements imply per course).
+    """
+    # Deactivate any existing active session for this course first (just in case)
+    start_time = datetime.now().isoformat()
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # End other sessions for this course
+        cursor.execute(
+            "UPDATE class_sessions SET is_active = 0, end_time = ? WHERE course_code = ? AND is_active = 1",
+            (start_time, course_code)
+        )
+        
+        cursor.execute(
+            """
+            INSERT INTO class_sessions (course_code, scheduled_start, start_time, is_active)
+            VALUES (?, ?, ?, 1)
+            """,
+            (course_code, scheduled_start, start_time)
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+def end_session(session_id):
+    """End a specific session."""
+    end_time = datetime.now().isoformat()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE class_sessions SET is_active = 0, end_time = ? WHERE id = ?",
+            (end_time, session_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+def get_active_session(course_code=None):
+    """Get the currently active session, optionally filtered by course."""
+    query = "SELECT * FROM class_sessions WHERE is_active = 1"
+    params = []
+    
+    if course_code:
+        query += " AND course_code = ?"
+        params.append(course_code)
+        
+    query += " ORDER BY start_time DESC LIMIT 1"
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
 
 
 def create_user(email, password_hash, name):
@@ -230,8 +319,46 @@ def record_attendance(student_id, status='present', course_code=None, level=None
         course_code (str, optional): Course context for this attendance
         level (str, optional): Level context
     """
+    
+    # Determine session_id if active
+    session_id = None
+    # We need to find if there is an active session for this course
+    # To avoid circular imports or redundant calls, we can implement lightweight check here or call get_active_session logic
+    # Ideally reuse get_active_session but we are in same file.
+    
+    # We can't easily call get_active_session because I defined it below originally? 
+    # Ah I am inserting create_session ABOVE. So get_active_session is available if I order it right.
+    # Wait, python allows calling functions defined later? No.
+    # I should have placed them carefully.
+    # Let's just implement the logic inline or rely on global scope if defined above.
+    # Let's assume get_active_session IS available because I inserted it at line 51 (above this function which is at 223).
+    
+    # However, Python functions find globals at runtime, so as long as it's defined in module it's fine.
+    
+    # But wait, I need to fetch it.
+    
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        
+        # Check active session
+        active_session_query = "SELECT id FROM class_sessions WHERE is_active = 1"
+        active_params = []
+        if course_code:
+            active_session_query += " AND course_code = ?"
+            active_params.append(course_code)
+            
+        cursor.execute(active_session_query + " ORDER BY start_time DESC LIMIT 1", active_params)
+        if session_row:
+            session_id = session_row['id']
+            # Check for late status if scheduled_start is set
+            if session_row['scheduled_start']:
+                scheduled_time = datetime.fromisoformat(session_row['scheduled_start'])
+                current_time = datetime.now()
+                # Late threshold: 15 minutes (or configurable)
+                # But for now let's just say if current > scheduled, it's late? 
+                # Usually there's a grace period. Let's assume 15 mins.
+                if (current_time - scheduled_time).total_seconds() > 900: # 15 mins
+                    status = 'late'
         
         # Check if student exists
         cursor.execute("SELECT id, name FROM students WHERE student_id = ?", (student_id,))
@@ -243,10 +370,10 @@ def record_attendance(student_id, status='present', course_code=None, level=None
             
         cursor.execute(
             """
-            INSERT INTO attendance (student_id, timestamp, status, course_code, level)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO attendance (student_id, timestamp, status, course_code, level, session_id)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (student_id, datetime.now().isoformat(), status, course_code, level)
+            (student_id, datetime.now().isoformat(), status, course_code, level, session_id)
         )
         conn.commit()
         return cursor.lastrowid

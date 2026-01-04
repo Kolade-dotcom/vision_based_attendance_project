@@ -10,9 +10,10 @@ document.addEventListener("DOMContentLoaded", function () {
   console.log("Smart Attendance System initialized (Modular)");
 
   // Initialize based on current page elements
-  if (document.getElementById("start-camera")) {
+  // Dashboard Initialization
+  // We check for Session Start button which is unique to dashboard now
+  if (document.getElementById("start-session-btn")) {
     initDashboard();
-    setupCameraListeners("camera-feed", "start-camera");
   }
 
   if (document.getElementById("enroll-form")) {

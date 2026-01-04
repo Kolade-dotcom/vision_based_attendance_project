@@ -25,6 +25,9 @@ class Camera:
     
     def start(self):
         """Start the video capture."""
+        if self.video_capture is not None and self.video_capture.isOpened():
+            return True # Already started
+
         self.video_capture = cv2.VideoCapture(self.camera_index)
         if not self.video_capture.isOpened():
             raise RuntimeError(f"Could not open camera at index {self.camera_index}")
@@ -43,7 +46,7 @@ class Camera:
         Returns:
             numpy.ndarray: The captured frame, or None if capture failed
         """
-        if self.video_capture is None:
+        if self.video_capture is None or not self.video_capture.isOpened():
             return None
         
         ret, frame = self.video_capture.read()
@@ -68,6 +71,16 @@ class Camera:
             return None
         
         return buffer.tobytes()
+
+# Global Singleton Instance
+_camera_instance = None
+
+def get_camera():
+    """Get or create the global camera instance."""
+    global _camera_instance
+    if _camera_instance is None:
+        _camera_instance = Camera()
+    return _camera_instance
 
 
 def detect_faces(frame):
@@ -122,7 +135,7 @@ if __name__ == '__main__':
     # Test camera functionality
     print("Testing camera module...")
     
-    cam = Camera()
+    cam = get_camera()
     try:
         cam.start()
         print("Camera started successfully!")

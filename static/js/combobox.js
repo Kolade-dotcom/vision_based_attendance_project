@@ -11,8 +11,12 @@ export class Combobox {
     onSelect,
     name = "",
   }) {
+    console.log("Combobox: Constructor called for", containerId);
     this.container = document.getElementById(containerId);
-    if (!this.container) return;
+    if (!this.container) {
+      console.error("Combobox: Container not found for ID:", containerId);
+      return;
+    }
 
     this.options = options; // Array of { value, label }
     this.searchable = searchable;
@@ -23,6 +27,7 @@ export class Combobox {
     this.isOpen = false;
 
     this.init();
+    console.log("Combobox: Initialized");
   }
 
   init() {
