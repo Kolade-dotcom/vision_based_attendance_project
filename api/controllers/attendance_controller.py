@@ -2,12 +2,10 @@ from flask import jsonify, request
 import db_helper
 
 def get_attendance_logic():
-    """Business logic for fetching today's attendance."""
+    """Business logic for fetching current session's attendance."""
     try:
-        course_code = request.args.get('course')
-        level = request.args.get('level')
-        
-        attendance = db_helper.get_attendance_today(course_code=course_code, level=level)
+        # Get attendance for the currently active session only
+        attendance = db_helper.get_attendance_for_active_session()
         return jsonify(attendance)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

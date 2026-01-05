@@ -1,32 +1,47 @@
 import pytest
 import sqlite3
 import os
+import tempfile
 from datetime import datetime
-from db_helper import init_database, get_db_connection, create_session, end_session, get_active_session, record_attendance
+from db_helper import (
+    init_database, get_db_connection, create_session, end_session, 
+    get_active_session, record_attendance, get_session_history, 
+    get_session_attendance, delete_session, set_database_path, get_database_path
+)
 from api.controllers.session_controller import start_session_logic, end_session_logic
 from app import app
 import json
 
-# Use an in-memory database or a temporary test database for isolation
-TEST_DB = 'test_attendance.db'
 
-@pytest.fixture
-def setup_db():
-    """Setup a temporary database for testing."""
-    # Override DATABASE_PATH in db_helper for testing purposes
-    # Since db_helper uses a global variable or relative path, we might need to patch it or just use a separate test file approach.
-    # ideally db_helper should allow dependency injection for the db path.
-    # For now, let's assume we can mock or we are running in a test env where 'attendance.db' is safe to touch, 
-    # OR better, we will rely on db_helper to possibly have a way to configure it.
+@pytest.fixture(autouse=True)
+def setup_test_db():
+    """
+    Setup an isolated temporary database for testing.
+    This runs before EACH test and cleans up after.
+    """
+    # Store the original database path
+    original_db_path = get_database_path()
     
-    # Given the existing code structure, it hardcodes the path. 
-    # To properly test without breaking dev DB, we should probably modify db_helper to allow overriding path, 
-    # but for this TDD step, I will assume we can patch it or minimal viable change.
+    # Create a temporary test database
+    fd, test_db_path = tempfile.mkstemp(suffix='.db')
+    os.close(fd)  # Close the file descriptor, we just need the path
     
-    # Actually, simpler approach for TDD "Red" phase: Just write the tests expecting the functions to exist.
-    yield
+    # Point db_helper to the test database
+    set_database_path(test_db_path)
+    
+    # Initialize the test database with schema
+    init_database()
+    
+    yield  # Run the test
+    
+    # Teardown: Restore original path and delete test database
+    set_database_path(original_db_path)
+    try:
+        os.unlink(test_db_path)
+    except OSError:
+        pass  # File might already be deleted
 
-def test_create_session(setup_db):
+def test_create_session():
     course_code = "CS101"
     scheduled_start = "2024-01-01T10:00:00"
     
@@ -40,7 +55,7 @@ def test_create_session(setup_db):
     assert active_session['course_code'] == course_code
     assert active_session['is_active'] == 1
 
-def test_end_session(setup_db):
+def test_end_session():
     course_code = "CS102"
     scheduled_start = "2024-01-01T12:00:00"
     session_id = create_session(course_code, scheduled_start)
@@ -54,7 +69,7 @@ def test_end_session(setup_db):
     # Check if end_time was set
     # (Assuming we have a way to get session details by ID, or just trust get_active_session returns None)
 
-def test_attendance_linking(setup_db):
+def test_attendance_linking():
     course_code = "CS103"
     scheduled_start = "2024-01-01T14:00:00"
     student_id = "TEST001"
@@ -81,7 +96,7 @@ def test_attendance_linking(setup_db):
     # or add a helper `get_session_attendance` in the plan.
     pass
 
-def test_controller_start_session(setup_db):
+def test_controller_start_session():
     """Test start_session_logic controller."""
     with app.test_request_context('/api/sessions/start', 
                                   method='POST',
@@ -91,7 +106,7 @@ def test_controller_start_session(setup_db):
         assert response.json['status'] == 'active'
         assert 'session_id' in response.json
 
-def test_controller_end_session(setup_db):
+def test_controller_end_session():
     """Test end_session_logic controller."""
     # First create a session
     sid = create_session('CS202', '2024-02-01T10:00:00')
@@ -102,4 +117,68 @@ def test_controller_end_session(setup_db):
         response, status_code = end_session_logic()
         assert status_code == 200
         assert response.json['status'] == 'inactive'
+
+
+def test_get_session_history():
+    """Test get_session_history returns inactive sessions."""
+    # Create and end a session
+    course_code = "HIST100"
+    scheduled_start = "2024-03-01T10:00:00"
+    session_id = create_session(course_code, scheduled_start)
+    end_session(session_id)
+    
+    # Get history
+    history = get_session_history()
+    
+    # Should contain our ended session
+    assert isinstance(history, list)
+    session_ids = [s['id'] for s in history]
+    assert session_id in session_ids
+    
+    # Find our session and verify it's inactive
+    our_session = next((s for s in history if s['id'] == session_id), None)
+    assert our_session is not None
+    assert our_session['is_active'] == 0
+    assert our_session['course_code'] == course_code
+
+
+def test_get_session_attendance():
+    """Test get_session_attendance returns records for specific session."""
+    # This test verifies the function exists and returns a list
+    # It will be empty if no attendance was recorded, which is fine
+    session_id = create_session("ATT100", "2024-03-01T11:00:00")
+    
+    records = get_session_attendance(session_id)
+    
+    assert isinstance(records, list)
+    # Empty list is valid if no students attended
+
+
+def test_delete_session():
+    """Test delete_session removes session and its attendance."""
+    course_code = "DEL100"
+    scheduled_start = "2024-03-01T12:00:00"
+    session_id = create_session(course_code, scheduled_start)
+    end_session(session_id)
+    
+    # Verify it exists in history
+    history_before = get_session_history()
+    session_ids_before = [s['id'] for s in history_before]
+    assert session_id in session_ids_before
+    
+    # Delete it
+    result = delete_session(session_id)
+    assert result == True
+    
+    # Verify it's gone
+    history_after = get_session_history()
+    session_ids_after = [s['id'] for s in history_after]
+    assert session_id not in session_ids_after
+
+
+def test_delete_nonexistent_session():
+    """Test delete_session returns False for non-existent session."""
+    result = delete_session(999999)
+    assert result == False
+
 

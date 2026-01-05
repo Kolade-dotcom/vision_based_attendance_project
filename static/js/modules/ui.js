@@ -54,7 +54,7 @@ export const uiHelpers = {
     if (!students || students.length === 0) {
       tbody.innerHTML = `
               <tr>
-                  <td colspan="4" class="h-24 text-center align-middle text-slate-500">No students enrolled yet</td>
+                  <td colspan="5" class="h-24 text-center align-middle text-slate-500">No students enrolled yet</td>
               </tr>
           `;
       return;
@@ -74,19 +74,17 @@ export const uiHelpers = {
               ).toLocaleDateString()}</td>
               <td class="p-4 align-middle">
                 <div class="flex items-center gap-2">
-                    <button class="edit-btn inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-slate-100 hover:text-slate-900 h-8 w-8" data-id="${
+                    <button class="edit-btn inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3" data-id="${
                       student.student_id
                     }" data-name="${student.name}" data-level="${
           student.level || ""
         }">
-                        <i data-lucide="pencil" class="h-4 w-4"></i>
-                        <span class="sr-only">Edit</span>
+                        <i data-lucide="pencil" class="h-4 w-4 mr-1"></i> Edit
                     </button>
-                    <button class="delete-btn inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-red-100 hover:text-red-900 h-8 w-8 text-red-600" data-id="${
+                    <button class="delete-btn inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 border border-red-200 bg-white hover:bg-red-50 text-red-600 h-9 px-3" data-id="${
                       student.student_id
                     }">
-                        <i data-lucide="trash-2" class="h-4 w-4"></i>
-                        <span class="sr-only">Delete</span>
+                        <i data-lucide="trash-2" class="h-4 w-4 mr-1"></i> Delete
                     </button>
                 </div>
               </td>

@@ -16,20 +16,47 @@ A Flask-based attendance system using **computer vision** and **face recognition
 
 ## ✨ Features
 
-- � **Secure Authentication**:
-  - Admin Login & Signup system.
-  - Protected Dashboard and Enrollment routes.
-  - Session-based access control.
-- �📸 **Real-time Face Detection**: Automated attendance marking via webcam.
-- 👤 **Student Management**:
-  - **Enrollment**: Capture face data and details.
-  - **Edit Profiles**: Update Name, Level, and **Matric Number** (with cascade updates).
-  - **Delete**: Remove students and their history.
-- 📊 **Dashboard & Analytics**:
-  - Real-time attendance table.
-  - Filter statistics by **Level** and **Course**.
-- 🔌 **Hardware Integration**: Arduino bridge for LEDs, buzzers, and door control.
-- 💾 **SQLite Database**: Persistent storage for students (`students` table), attendance logs (`attendance` table), and admin accounts (`users` table).
+### 🔐 Authentication & Security
+
+- Admin Login & Signup system
+- Protected Dashboard and Enrollment routes
+- Session-based access control
+
+### 📸 Real-time Face Detection
+
+- Automated attendance marking via webcam
+- **Optimized detection** with frame resizing (0.25x) and frame skipping
+- Cached Haar Cascade classifier for better performance
+- Green bounding boxes around detected faces
+
+### 📅 Session Management
+
+- **Start/End Class Sessions** with course selection and scheduled time
+- **Session Timer** displaying elapsed time
+- **Session History** with view, export, and delete actions
+- **Session-scoped attendance** - records are linked to specific sessions
+
+### 👤 Student Management
+
+- **Enrollment**: Capture face data and student details
+- **Edit Profiles**: Update Name, Level, and Matric Number (with cascade updates)
+- **Delete**: Remove students and their attendance history
+- **Recently Enrolled** table with Edit/Delete actions
+
+### 📊 Dashboard & Analytics
+
+- Real-time session attendance table
+- Filter statistics by Level and Course
+- Statistics cards (Present, Late, Total Students)
+
+### 🔌 Hardware Integration
+
+- Arduino bridge for LEDs, buzzers, and door control
+
+### 💾 Database
+
+- SQLite with tables: `students`, `attendance`, `class_sessions`, `users`
+- Test isolation with temporary databases
 
 ---
 
@@ -102,20 +129,20 @@ Open your browser and navigate to: **http://localhost:5000**
 ```
 /vision_attendance_project
 ├── /api
-│   ├── /controllers     # Business logic (Auth, Student, Attendance)
+│   ├── /controllers     # Business logic (Auth, Student, Session, Attendance)
 │   └── /routes          # API endpoints (Blueprints)
 ├── /static
-│   ├── /css             # StylesheetsAPI
+│   ├── /css             # Stylesheets
 │   └── /js
 │       ├── /api         # API Client
 │       ├── /modules     # Reusable UI modules
-│       ├── /pages       # Page-specific logic
+│       ├── /pages       # Page-specific logic (dashboard, enrollment)
 │       └── main.js      # Entry point
 ├── /templates           # HTML Templates (Base, Index, Enroll, Login)
 ├── /database            # Schema and SQLite DB
-├── /tests               # Pytest suite
+├── /tests               # Pytest suite (with test isolation)
 ├── app.py               # Application entry point
-├── camera.py            # Vision processing
+├── camera.py            # Vision processing with optimized detection
 ├── db_helper.py         # Database utilities
 └── requirements.txt     # Dependencies
 ```
@@ -141,18 +168,30 @@ Open your browser and navigate to: **http://localhost:5000**
 | `/api/students/<id>` | PUT    | Update student (Name, Level, ID) |
 | `/api/students/<id>` | DELETE | Delete student                   |
 
+### Sessions
+
+| Endpoint                        | Method | Description                      |
+| :------------------------------ | :----- | :------------------------------- |
+| `/api/sessions/start`           | POST   | Start a new class session        |
+| `/api/sessions/end`             | POST   | End the active session           |
+| `/api/sessions/active`          | GET    | Get current active session       |
+| `/api/sessions/history`         | GET    | Get past session history         |
+| `/api/sessions/<id>/attendance` | GET    | Get attendance for a session     |
+| `/api/sessions/<id>/export`     | GET    | Export session attendance as CSV |
+| `/api/sessions/<id>`            | DELETE | Delete a session and its records |
+
 ### Attendance
 
 | Endpoint                | Method | Description                               |
 | :---------------------- | :----- | :---------------------------------------- |
-| `/api/attendance/today` | GET    | Get today's attendance (supports filters) |
+| `/api/attendance/today` | GET    | Get session attendance (supports filters) |
 | `/api/statistics`       | GET    | Get system stats (supports filters)       |
 
 ---
 
 ## 🧪 Testing
 
-This project uses **pytest** for Test-Driven Development (TDD).
+This project uses **pytest** with **test database isolation** - tests run against temporary databases and don't affect production data.
 
 ```powershell
 # Run all tests
@@ -160,8 +199,17 @@ pytest
 
 # Run specific test file
 pytest tests/test_db.py
-pytest tests/test_api.py
+pytest tests/test_sessions.py -v
+
+# Run with verbose output
+pytest -v --tb=short
 ```
+
+### Test Coverage
+
+- `test_db.py` - Database helper functions
+- `test_api.py` - API endpoint tests
+- `test_sessions.py` - Session management and history
 
 ---
 

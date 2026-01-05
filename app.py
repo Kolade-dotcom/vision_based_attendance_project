@@ -7,7 +7,7 @@ from api.routes.attendance_routes import attendance_bp
 from api.routes.auth_routes import auth_bp
 from api.routes.session_routes import session_bp
 from api.controllers.auth_controller import login_required
-from camera import get_camera, detect_faces, draw_face_boxes
+from camera import get_camera, draw_face_boxes
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -47,21 +47,18 @@ def health_check():
     return jsonify({'status': 'healthy', 'message': 'Attendance system modular API is running'})
 
 def gen_frames():
-    """Video streaming generator function."""
+    """Video streaming generator function with optimized face detection."""
     camera = get_camera()
-    # Note: Camera start/stop is now handled by session controller
+    # Camera start is handled by session controller
     
     while True:
         frame = camera.get_frame()
         if frame is None:
             # If camera is stopped (session ended) or error, we break or yield placeholder
-            # For now, let's yield a blank frame or break. 
-            # If we break, the client sees a broken image.
-            # Let's try to yield a black frame or just break.
             break
         
-        # Detect faces (Basic detection for now)
-        faces = detect_faces(frame)
+        # Detect faces using optimized method (resizing, frame skip, cached classifier)
+        faces = camera.detect_faces_optimized(frame)
         frame = draw_face_boxes(frame, faces)
         
         # Encode frame

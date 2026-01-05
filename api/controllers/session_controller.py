@@ -98,3 +98,22 @@ def export_session_logic(session_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def get_session_attendance_logic(session_id):
+    """Get attendance records for a specific session (for viewing)."""
+    try:
+        records = db_helper.get_session_attendance(session_id)
+        return jsonify(records), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def delete_session_logic(session_id):
+    """Delete a session and its attendance records."""
+    try:
+        success = db_helper.delete_session(session_id)
+        if success:
+            return jsonify({'message': 'Session deleted'}), 200
+        else:
+            return jsonify({'error': 'Session not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

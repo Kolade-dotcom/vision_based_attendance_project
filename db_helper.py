@@ -9,14 +9,23 @@ from contextlib import contextmanager
 import os
 import json
 
-# Database file path
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'database', 'attendance.db')
+# Database file path (can be overridden for testing)
+_DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'database', 'attendance.db')
+
+def get_database_path():
+    """Get the current database path."""
+    return _DATABASE_PATH
+
+def set_database_path(path):
+    """Set the database path. Used for test isolation."""
+    global _DATABASE_PATH
+    _DATABASE_PATH = path
 
 
 @contextmanager
 def get_db_connection():
     """Context manager for database connection."""
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(_DATABASE_PATH)
     conn.row_factory = sqlite3.Row  # Access columns by name
     try:
         yield conn
@@ -31,51 +40,8 @@ def init_database():
     with open(schema_path, 'r') as f:
         schema = f.read()
     
-    # Add users table schema if not in file (or just execute it here for simplicity since we can't easily edit sql file dynamically and reliably without wiping)
-    # Actually, we should probably append to the schema file or just run the create statement here.
-    users_schema = """
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        name TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-    """
-
     with get_db_connection() as conn:
         conn.executescript(schema)
-        conn.execute(users_schema)
-        conn.commit()
-    
-    
-    # Create sessions table
-    sessions_schema = """
-    CREATE TABLE IF NOT EXISTS class_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        course_code TEXT NOT NULL,
-        scheduled_start TEXT,
-        start_time TEXT NOT NULL,
-        end_time TEXT,
-        is_active INTEGER DEFAULT 1
-    );
-    """
-    
-    with get_db_connection() as conn:
-        conn.executescript(schema)
-        conn.execute(users_schema)
-        conn.execute(sessions_schema)
-        
-        # Check if session_id exists in attendance table, if not add it
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(attendance)")
-        columns = [info[1] for info in cursor.fetchall()]
-        if 'session_id' not in columns:
-            try:
-                conn.execute("ALTER TABLE attendance ADD COLUMN session_id INTEGER")
-            except sqlite3.OperationalError:
-                pass # Already exists
-                
         conn.commit()
     
     print("Database initialized successfully!")
@@ -116,6 +82,17 @@ def end_session(session_id):
             "UPDATE class_sessions SET is_active = 0, end_time = ? WHERE id = ?",
             (end_time, session_id)
         )
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_session(session_id):
+    """Delete a session and its associated attendance records."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Delete attendance records for this session first
+        cursor.execute("DELETE FROM attendance WHERE session_id = ?", (session_id,))
+        # Delete the session
+        cursor.execute("DELETE FROM class_sessions WHERE id = ?", (session_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -341,13 +318,14 @@ def record_attendance(student_id, status='present', course_code=None, level=None
         cursor = conn.cursor()
         
         # Check active session
-        active_session_query = "SELECT id FROM class_sessions WHERE is_active = 1"
+        active_session_query = "SELECT id, scheduled_start FROM class_sessions WHERE is_active = 1"
         active_params = []
         if course_code:
             active_session_query += " AND course_code = ?"
             active_params.append(course_code)
             
         cursor.execute(active_session_query + " ORDER BY start_time DESC LIMIT 1", active_params)
+        session_row = cursor.fetchone()
         if session_row:
             session_id = session_row['id']
             # Check for late status if scheduled_start is set
@@ -454,6 +432,63 @@ def get_statistics(course_code=None, level=None):
         }
 
 
+def get_session_history():
+    """
+    Get all past (inactive) sessions, ordered by start time descending.
+    
+    Returns:
+        list: List of session dictionaries.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, course_code, scheduled_start, start_time, end_time, is_active
+            FROM class_sessions
+            WHERE is_active = 0
+            ORDER BY start_time DESC
+            """
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_session_attendance(session_id):
+    """
+    Get all attendance records for a specific session.
+    
+    Args:
+        session_id: The ID of the session.
+    
+    Returns:
+        list: List of attendance record dictionaries.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT a.student_id, s.name as student_name, a.timestamp, a.status, a.course_code
+            FROM attendance a
+            JOIN students s ON a.student_id = s.student_id
+            WHERE a.session_id = ?
+            ORDER BY a.timestamp DESC
+            """,
+            (session_id,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_attendance_for_active_session():
+    """
+    Get attendance records for the currently active session.
+    
+    Returns:
+        list: List of attendance record dictionaries, or empty list if no active session.
+    """
+    active_session = get_active_session()
+    if not active_session:
+        return []
+    
+    return get_session_attendance(active_session['id'])
 
 
 if __name__ == '__main__':

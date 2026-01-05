@@ -4,6 +4,14 @@
 -- Enable foreign keys
 PRAGMA foreign_keys = ON;
 
+-- Users table (Admin authentication)
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Students table
 CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,20 +28,38 @@ CREATE TABLE IF NOT EXISTS students (
 -- Create index on student_id for faster lookups
 CREATE INDEX IF NOT EXISTS idx_students_student_id ON students(student_id);
 
+-- Class Sessions table
+CREATE TABLE IF NOT EXISTS class_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_code TEXT NOT NULL,
+    scheduled_start TEXT,           -- e.g. "2024-01-15T09:00:00"
+    start_time TEXT NOT NULL,       -- Actual start time
+    end_time TEXT,                  -- NULL while session is active
+    is_active INTEGER DEFAULT 1,    -- 1 = active, 0 = ended
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Create index on class_sessions for active session lookups
+CREATE INDEX IF NOT EXISTS idx_sessions_active ON class_sessions(is_active);
+CREATE INDEX IF NOT EXISTS idx_sessions_course ON class_sessions(course_code);
+
 -- Attendance records table
 CREATE TABLE IF NOT EXISTS attendance (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id TEXT NOT NULL,
+    session_id INTEGER,             -- Links to class_sessions
     timestamp TEXT NOT NULL,
     status TEXT DEFAULT 'present' CHECK(status IN ('present', 'late', 'absent')),
     course_code TEXT,   -- e.g. "MTE411"
     level TEXT,         -- e.g. "400" (Level at time of attendance)
-    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
+    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES class_sessions(id) ON DELETE CASCADE
 );
 
 -- Create indexes for attendance queries
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_timestamp ON attendance(timestamp);
+CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance(session_id);
 
 -- System settings table (for future use)
 CREATE TABLE IF NOT EXISTS settings (
