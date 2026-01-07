@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (document.getElementById("enroll-form")) {
     initEnrollment();
-    setupCameraListeners("enroll-camera", "start-enroll-camera");
+    // setupCameraListeners("enroll-camera", "start-enroll-camera"); // Removed to avoid conflict with guided capture
   }
 });
 

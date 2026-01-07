@@ -1,4 +1,5 @@
 import json
+import base64
 from flask import jsonify
 import db_helper
 
@@ -13,8 +14,21 @@ def enroll_student_logic(data):
         email = data.get('email')
         level = data.get('level')
         courses = data.get('courses', [])
+        face_encoding_b64 = data.get('face_encoding')
         
-        row_id = db_helper.add_student(student_id, name, email, level=level, courses=courses)
+        # Decode face encoding if provided
+        face_encoding_bytes = None
+        if face_encoding_b64:
+            try:
+                face_encoding_bytes = base64.b64decode(face_encoding_b64)
+            except Exception:
+                return jsonify({'error': 'Invalid face encoding format'}), 400
+        
+        row_id = db_helper.add_student(
+            student_id, name, email, 
+            level=level, courses=courses, 
+            face_encoding=face_encoding_bytes
+        )
         
         if row_id is None:
              return jsonify({'error': 'Student ID already exists'}), 409
@@ -23,7 +37,8 @@ def enroll_student_logic(data):
             'status': 'success',
             'message': f'Student {name} enrolled successfully',
             'id': row_id,
-            'student_id': student_id
+            'student_id': student_id,
+            'has_face_encoding': face_encoding_bytes is not None
         }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500

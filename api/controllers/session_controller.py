@@ -1,21 +1,24 @@
-from flask import jsonify, request
+from flask import jsonify, request, session as flask_session
 import db_helper
 from camera import get_camera
 
 def start_session_logic():
     """
-    Start a new session.
-    Expects JSON: { "course_code": "...", "scheduled_start": "..." }
+    Start a new session for the logged-in user.
+    Expects JSON: { "course_code": "..." }
     """
     try:
+        user_id = flask_session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+            
         data = request.get_json()
         course_code = data.get('course_code')
-        scheduled_start = data.get('scheduled_start')
         
-        if not course_code or not scheduled_start:
-            return jsonify({'error': 'Missing course_code or scheduled_start'}), 400
+        if not course_code:
+            return jsonify({'error': 'Missing course_code'}), 400
             
-        session_id = db_helper.create_session(course_code, scheduled_start)
+        session_id = db_helper.create_session(course_code, user_id)
         
         # Start Camera
         try:
@@ -50,20 +53,28 @@ def end_session_logic():
         return jsonify({'error': str(e)}), 500
 
 def get_active_session_logic():
-    """Get active session for a course (optional query param)."""
+    """Get active session for the logged-in user."""
     try:
+        user_id = flask_session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+            
         course_code = request.args.get('course_code')
-        session = db_helper.get_active_session(course_code)
+        session = db_helper.get_active_session(user_id, course_code)
         if session:
             return jsonify(session), 200
-        return jsonify({'message': 'No active session'}), 200 # Or 404? 200 with null is often easier for FE
+        return jsonify({'message': 'No active session'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 def get_history_logic():
-    """Get session history."""
+    """Get session history for the logged-in user."""
     try:
-        history = db_helper.get_session_history()
+        user_id = flask_session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+            
+        history = db_helper.get_session_history(user_id)
         return jsonify(history), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

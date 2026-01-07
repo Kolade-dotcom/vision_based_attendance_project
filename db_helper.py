@@ -34,41 +34,60 @@ def get_db_connection():
 
 
 def init_database():
-    """Initialize the database with schema."""
+    """Initialize the database with schema and run migrations."""
     schema_path = os.path.join(os.path.dirname(__file__), 'database', 'schema.sql')
     
     with open(schema_path, 'r') as f:
         schema = f.read()
     
     with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Check if class_sessions table exists and needs migration
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='class_sessions'")
+        table_exists = cursor.fetchone() is not None
+        
+        if table_exists:
+            # Check if user_id column exists
+            cursor.execute("PRAGMA table_info(class_sessions)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'user_id' not in columns:
+                # Add column with default value for existing records
+                conn.execute("ALTER TABLE class_sessions ADD COLUMN user_id INTEGER DEFAULT 1")
+                print("Migration: Added user_id column to class_sessions")
+        
+        # Now execute the schema (CREATE IF NOT EXISTS won't modify existing tables)
         conn.executescript(schema)
         conn.commit()
     
     print("Database initialized successfully!")
 
-def create_session(course_code, scheduled_start):
+def create_session(course_code, user_id):
     """
     Start a new class session.
-    Ensures only one active session per course exists (or potentially global, but requirements imply per course).
+    Ensures only one active session per user exists.
+    
+    Args:
+        course_code: The course code for this session
+        user_id: The ID of the lecturer creating the session
     """
-    # Deactivate any existing active session for this course first (just in case)
     start_time = datetime.now().isoformat()
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        # End other sessions for this course
+        # End any existing active sessions for this user
         cursor.execute(
-            "UPDATE class_sessions SET is_active = 0, end_time = ? WHERE course_code = ? AND is_active = 1",
-            (start_time, course_code)
+            "UPDATE class_sessions SET is_active = 0, end_time = ? WHERE user_id = ? AND is_active = 1",
+            (start_time, user_id)
         )
         
         cursor.execute(
             """
-            INSERT INTO class_sessions (course_code, scheduled_start, start_time, is_active)
-            VALUES (?, ?, ?, 1)
+            INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active)
+            VALUES (?, ?, ?, ?, 1)
             """,
-            (course_code, scheduled_start, start_time)
+            (user_id, course_code, start_time, start_time)
         )
         conn.commit()
         return cursor.lastrowid
@@ -96,10 +115,10 @@ def delete_session(session_id):
         conn.commit()
         return cursor.rowcount > 0
 
-def get_active_session(course_code=None):
-    """Get the currently active session, optionally filtered by course."""
-    query = "SELECT * FROM class_sessions WHERE is_active = 1"
-    params = []
+def get_active_session(user_id, course_code=None):
+    """Get the currently active session for a specific user, optionally filtered by course."""
+    query = "SELECT * FROM class_sessions WHERE is_active = 1 AND user_id = ?"
+    params = [user_id]
     
     if course_code:
         query += " AND course_code = ?"
@@ -286,6 +305,19 @@ def get_all_students():
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_all_student_encodings():
+    """
+    Get all students' face encodings.
+    
+    Returns:
+        list: List of dicts with 'student_id', 'name', and 'face_encoding' (bytes)
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT student_id, name, face_encoding FROM students WHERE face_encoding IS NOT NULL")
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def record_attendance(student_id, status='present', course_code=None, level=None):
     """
     Record attendance for a student.
@@ -339,13 +371,27 @@ def record_attendance(student_id, status='present', course_code=None, level=None
                     status = 'late'
         
         # Check if student exists
-        cursor.execute("SELECT id, name FROM students WHERE student_id = ?", (student_id,))
+        cursor.execute("SELECT id, name, level FROM students WHERE student_id = ?", (student_id,))
         student = cursor.fetchone()
         
         if not student:
             print(f"Error: Student {student_id} not found.")
             return None
             
+        # If level is not passed, use student's level
+        if not level and student['level']:
+            level = student['level']
+            
+        # Check for existing attendance in this session to prevent duplicates
+        if session_id:
+            cursor.execute(
+                "SELECT 1 FROM attendance WHERE session_id = ? AND student_id = ?", 
+                (session_id, student_id)
+            )
+            if cursor.fetchone():
+                # Already marked present
+                return None
+
         cursor.execute(
             """
             INSERT INTO attendance (student_id, timestamp, status, course_code, level, session_id)
@@ -432,9 +478,12 @@ def get_statistics(course_code=None, level=None):
         }
 
 
-def get_session_history():
+def get_session_history(user_id):
     """
-    Get all past (inactive) sessions, ordered by start time descending.
+    Get all past (inactive) sessions for a specific user, ordered by start time descending.
+    
+    Args:
+        user_id: The ID of the lecturer whose sessions to retrieve.
     
     Returns:
         list: List of session dictionaries.
@@ -445,9 +494,10 @@ def get_session_history():
             """
             SELECT id, course_code, scheduled_start, start_time, end_time, is_active
             FROM class_sessions
-            WHERE is_active = 0
+            WHERE is_active = 0 AND user_id = ?
             ORDER BY start_time DESC
-            """
+            """,
+            (user_id,)
         )
         return [dict(row) for row in cursor.fetchall()]
 

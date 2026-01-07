@@ -7,8 +7,9 @@ PRAGMA foreign_keys = ON;
 -- Users table (Admin authentication)
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -31,17 +32,20 @@ CREATE INDEX IF NOT EXISTS idx_students_student_id ON students(student_id);
 -- Class Sessions table
 CREATE TABLE IF NOT EXISTS class_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,           -- Links session to lecturer who created it
     course_code TEXT NOT NULL,
     scheduled_start TEXT,           -- e.g. "2024-01-15T09:00:00"
     start_time TEXT NOT NULL,       -- Actual start time
     end_time TEXT,                  -- NULL while session is active
     is_active INTEGER DEFAULT 1,    -- 1 = active, 0 = ended
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Create index on class_sessions for active session lookups
 CREATE INDEX IF NOT EXISTS idx_sessions_active ON class_sessions(is_active);
 CREATE INDEX IF NOT EXISTS idx_sessions_course ON class_sessions(course_code);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON class_sessions(user_id);
 
 -- Attendance records table
 CREATE TABLE IF NOT EXISTS attendance (

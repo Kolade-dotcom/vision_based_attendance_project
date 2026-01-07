@@ -134,6 +134,172 @@ class Camera:
         
         return buffer.tobytes()
 
+
+class FaceDetector:
+    """
+    Advanced face detector using face_recognition library with HOG model.
+    
+    Features:
+    - HOG-based detection (more robust than Haar)
+    - Frame skipping for performance
+    - Temporal smoothing for stable bounding boxes
+    - IoU-based face tracking across frames
+    """
+    
+    def __init__(self, model="hog", scale=0.5, skip_frames=2, smoothing_window=3):
+        """
+        Initialize the FaceDetector.
+        
+        Args:
+            model: Detection model - "hog" (fast) or "cnn" (accurate, needs GPU)
+            scale: Downscale factor for performance (0.5 = half size)
+            skip_frames: Process every Nth frame (cache results for others)
+            smoothing_window: Number of frames to average for smoothing
+        """
+        self.model = model
+        self.scale = scale
+        self.skip_frames = skip_frames
+        self.smoothing_window = smoothing_window
+        
+        self.frame_count = 0
+        self.cached_faces = []
+        self.detection_history = []  # For temporal smoothing
+    
+    def detect(self, frame):
+        """
+        Detect faces in a frame.
+        
+        Args:
+            frame: BGR numpy array from OpenCV
+        
+        Returns:
+            list: List of (x, y, w, h) tuples for each detected face
+        """
+        self.frame_count += 1
+        
+        # Skip frames optimization
+        if self.frame_count % self.skip_frames != 0:
+            return self.cached_faces
+        
+        # Resize for performance
+        small_frame = cv2.resize(frame, (0, 0), fx=self.scale, fy=self.scale)
+        
+        # Convert BGR to RGB (face_recognition uses RGB)
+        rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        
+        # Detect faces using face_recognition (returns top, right, bottom, left)
+        face_locations = face_recognition.face_locations(rgb_frame, model=self.model)
+        
+        # Convert to (x, y, w, h) format and scale back
+        faces = []
+        for (top, right, bottom, left) in face_locations:
+            x = int(left / self.scale)
+            y = int(top / self.scale)
+            w = int((right - left) / self.scale)
+            h = int((bottom - top) / self.scale)
+            faces.append((x, y, w, h))
+        
+        # Apply temporal smoothing
+        self.detection_history.append(faces)
+        if len(self.detection_history) > self.smoothing_window:
+            self.detection_history.pop(0)
+        
+        # Smooth detections if we have history
+        if len(self.detection_history) >= 2:
+            self.cached_faces = self._smooth_detections(self.detection_history)
+        else:
+            self.cached_faces = faces
+        
+        return self.cached_faces
+    
+    def _scale_boxes(self, boxes, scale_factor):
+        """Scale bounding boxes back to original frame size."""
+        return [
+            (int(x / scale_factor), int(y / scale_factor), 
+             int(w / scale_factor), int(h / scale_factor))
+            for (x, y, w, h) in boxes
+        ]
+    
+    def _calculate_iou(self, box1, box2):
+        """
+        Calculate Intersection over Union between two boxes.
+        
+        Args:
+            box1, box2: Tuples of (x, y, w, h)
+        
+        Returns:
+            float: IoU value between 0 and 1
+        """
+        x1, y1, w1, h1 = box1
+        x2, y2, w2, h2 = box2
+        
+        # Calculate intersection
+        xi1 = max(x1, x2)
+        yi1 = max(y1, y2)
+        xi2 = min(x1 + w1, x2 + w2)
+        yi2 = min(y1 + h1, y2 + h2)
+        
+        if xi2 <= xi1 or yi2 <= yi1:
+            return 0.0  # No overlap
+        
+        intersection = (xi2 - xi1) * (yi2 - yi1)
+        
+        # Calculate union
+        area1 = w1 * h1
+        area2 = w2 * h2
+        union = area1 + area2 - intersection
+        
+        return intersection / union if union > 0 else 0.0
+    
+    def _smooth_detections(self, history):
+        """
+        Smooth face detections across multiple frames.
+        
+        Uses IoU to match faces across frames and averages positions.
+        
+        Args:
+            history: List of detection lists from recent frames
+        
+        Returns:
+            list: Smoothed face positions
+        """
+        if not history or not history[-1]:
+            return []
+        
+        current_faces = history[-1]
+        if len(history) < 2:
+            return current_faces
+        
+        # Average with previous detections using IoU matching
+        smoothed = []
+        for face in current_faces:
+            matched_positions = [face]
+            
+            # Find matching faces in previous frames
+            for prev_faces in history[:-1]:
+                best_match = None
+                best_iou = 0.3  # Minimum IoU threshold
+                
+                for prev_face in prev_faces:
+                    iou = self._calculate_iou(face, prev_face)
+                    if iou > best_iou:
+                        best_iou = iou
+                        best_match = prev_face
+                
+                if best_match:
+                    matched_positions.append(best_match)
+            
+            # Average the matched positions
+            if matched_positions:
+                avg_x = int(sum(f[0] for f in matched_positions) / len(matched_positions))
+                avg_y = int(sum(f[1] for f in matched_positions) / len(matched_positions))
+                avg_w = int(sum(f[2] for f in matched_positions) / len(matched_positions))
+                avg_h = int(sum(f[3] for f in matched_positions) / len(matched_positions))
+                smoothed.append((avg_x, avg_y, avg_w, avg_h))
+        
+        return smoothed
+
+
 # Global Singleton Instance
 _camera_instance = None
 

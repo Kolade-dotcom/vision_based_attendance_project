@@ -2,12 +2,16 @@ import { apiClient } from "../api/client.js";
 import { uiHelpers } from "../modules/ui.js";
 import { Combobox } from "../combobox.js";
 
+// Module-level state for face capture
+let captureStatusInterval = null;
+let faceEncodingData = null;
+
 /**
  * Initialize Enrollment Page
  */
 export function initEnrollment() {
   const startEnrollCameraBtn = document.getElementById("start-enroll-camera");
-  const captureFaceBtn = document.getElementById("capture-face");
+  const resetCaptureBtn = document.getElementById("reset-capture");
   const enrollForm = document.getElementById("enroll-form");
   const addCourseBtn = document.getElementById("add-course-btn");
 
@@ -27,18 +31,11 @@ export function initEnrollment() {
   });
 
   if (startEnrollCameraBtn) {
-    startEnrollCameraBtn.addEventListener("click", function () {
-      console.log("Starting enrollment camera...");
-      if (captureFaceBtn) {
-        captureFaceBtn.disabled = false;
-      }
-    });
+    startEnrollCameraBtn.addEventListener("click", startGuidedCapture);
   }
 
-  if (captureFaceBtn) {
-    captureFaceBtn.addEventListener("click", function () {
-      captureFace();
-    });
+  if (resetCaptureBtn) {
+    resetCaptureBtn.addEventListener("click", resetCapture);
   }
 
   if (enrollForm) {
@@ -63,6 +60,161 @@ export function initEnrollment() {
 
   // Setup Modal Listeners
   setupModalListeners();
+}
+
+/**
+ * Start the guided face capture process
+ */
+async function startGuidedCapture() {
+  const cameraPlaceholder = document.getElementById("enroll-camera");
+  const videoElement = document.getElementById("enrollment-video");
+  const progressContainer = document.getElementById(
+    "capture-progress-container"
+  );
+  const startBtn = document.getElementById("start-enroll-camera");
+  const resetBtn = document.getElementById("reset-capture");
+  const statusEl = document.getElementById("capture-status");
+
+  try {
+    // Call API to start capture session
+    const response = await fetch("/api/start_capture", { method: "POST" });
+    const result = await response.json();
+
+    if (result.status !== "success") {
+      throw new Error(result.error || "Failed to start capture");
+    }
+
+    // Update UI
+    if (cameraPlaceholder) cameraPlaceholder.classList.add("hidden");
+    if (videoElement) {
+      videoElement.src = "/enrollment_video_feed?" + Date.now();
+      videoElement.classList.remove("hidden");
+    }
+    if (progressContainer) progressContainer.classList.remove("hidden");
+    if (startBtn) startBtn.classList.add("hidden");
+    if (resetBtn) resetBtn.classList.remove("hidden");
+    if (statusEl) statusEl.textContent = "Follow the on-screen instructions...";
+
+    // Start polling for status
+    captureStatusInterval = setInterval(pollCaptureStatus, 500);
+  } catch (error) {
+    console.error("Error starting capture:", error);
+    if (statusEl) statusEl.textContent = "Error: " + error.message;
+  }
+}
+
+/**
+ * Poll capture status and update UI
+ */
+async function pollCaptureStatus() {
+  const instructionEl = document.getElementById("capture-instruction");
+  const countEl = document.getElementById("capture-count");
+  const progressBar = document.getElementById("capture-progress-bar");
+  const feedbackEl = document.getElementById("capture-feedback");
+  const statusEl = document.getElementById("capture-status");
+  const enrollBtn = document.getElementById("enroll-btn");
+
+  try {
+    const response = await fetch("/api/capture_status");
+    const status = await response.json();
+
+    // Update UI elements
+    if (instructionEl) instructionEl.textContent = status.instruction;
+    if (countEl) {
+      const totalFrames = status.total_stages * status.frames_needed;
+      const captured =
+        status.stage_index * status.frames_needed + status.frames_captured;
+      countEl.textContent = `${captured}/${totalFrames}`;
+    }
+    if (progressBar) progressBar.style.width = `${status.progress_percent}%`;
+
+    // Check if complete
+    if (status.is_complete) {
+      clearInterval(captureStatusInterval);
+      captureStatusInterval = null;
+
+      // Fetch face encoding
+      await fetchFaceEncoding();
+
+      if (statusEl) {
+        statusEl.textContent = "✅ Face capture complete!";
+        statusEl.classList.remove("text-slate-500");
+        statusEl.classList.add("text-emerald-600");
+      }
+      if (feedbackEl) feedbackEl.textContent = "";
+      if (enrollBtn) enrollBtn.disabled = false;
+    }
+  } catch (error) {
+    console.error("Error polling status:", error);
+  }
+}
+
+/**
+ * Fetch face encoding after capture is complete
+ */
+async function fetchFaceEncoding() {
+  try {
+    const response = await fetch("/api/get_face_encoding");
+    const result = await response.json();
+
+    if (result.status === "success") {
+      faceEncodingData = result.face_encoding;
+      // Store in hidden input
+      const hiddenInput = document.getElementById("face-encoding-data");
+      if (hiddenInput) hiddenInput.value = faceEncodingData;
+      console.log(
+        `Face encoding captured with ${result.encoding_count} samples`
+      );
+    }
+  } catch (error) {
+    console.error("Error fetching face encoding:", error);
+  }
+}
+
+/**
+ * Reset the face capture process
+ */
+async function resetCapture() {
+  // Stop polling
+  if (captureStatusInterval) {
+    clearInterval(captureStatusInterval);
+    captureStatusInterval = null;
+  }
+
+  // Reset backend
+  await fetch("/api/reset_capture", { method: "POST" });
+
+  // Reset UI
+  const cameraPlaceholder = document.getElementById("enroll-camera");
+  const videoElement = document.getElementById("enrollment-video");
+  const progressContainer = document.getElementById(
+    "capture-progress-container"
+  );
+  const startBtn = document.getElementById("start-enroll-camera");
+  const resetBtn = document.getElementById("reset-capture");
+  const statusEl = document.getElementById("capture-status");
+  const enrollBtn = document.getElementById("enroll-btn");
+  const progressBar = document.getElementById("capture-progress-bar");
+
+  if (cameraPlaceholder) cameraPlaceholder.classList.remove("hidden");
+  if (videoElement) {
+    videoElement.src = "";
+    videoElement.classList.add("hidden");
+  }
+  if (progressContainer) progressContainer.classList.add("hidden");
+  if (startBtn) startBtn.classList.remove("hidden");
+  if (resetBtn) resetBtn.classList.add("hidden");
+  if (statusEl) {
+    statusEl.textContent = "";
+    statusEl.classList.remove("text-emerald-600");
+    statusEl.classList.add("text-slate-500");
+  }
+  if (enrollBtn) enrollBtn.disabled = true;
+  if (progressBar) progressBar.style.width = "0%";
+
+  faceEncodingData = null;
+  const hiddenInput = document.getElementById("face-encoding-data");
+  if (hiddenInput) hiddenInput.value = "";
 }
 
 /**
@@ -212,23 +364,6 @@ async function confirmDeleteStudent() {
 }
 
 /**
- * Capture face for enrollment (Simulated)
- */
-function captureFace() {
-  const statusEl = document.getElementById("capture-status");
-  const enrollBtn = document.getElementById("enroll-btn");
-
-  if (statusEl) {
-    statusEl.textContent = "✅ Face captured successfully!";
-    // statusEl.style.color = "var(--success-color)"; // Handled by Tailwind classes if needed or valid default
-  }
-
-  if (enrollBtn) {
-    enrollBtn.disabled = false;
-  }
-}
-
-/**
  * Manage Courses List
  */
 let courses = [];
@@ -288,6 +423,7 @@ async function submitEnrollment() {
     email: formData.get("email"),
     level: formData.get("level"),
     courses: JSON.parse(formData.get("courses") || "[]"),
+    face_encoding: faceEncodingData || null,
   };
 
   try {
@@ -311,9 +447,11 @@ async function submitEnrollment() {
 
       // Refresh the list
       fetchEnrolledStudents();
+
+      // Reset face capture state
+      resetCapture();
+
       // Reset level combobox
-      // Note: To fully reset combobox we might need to expose a reset method or re-init,
-      // but for now form reset clears native inputs, combobox hidden input needs manual clear if not re-inited.
       const levelHidden = document.querySelector(
         "#level-combobox input[type=hidden]"
       );

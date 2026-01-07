@@ -120,11 +120,12 @@
       <div class="flex flex-col space-y-1.5 p-6">
         <h3 class="font-semibold leading-none tracking-tight">Face Capture</h3>
         <p class="text-sm text-slate-500">
-          Capture the student's face for recognition.
+          Follow the on-screen instructions to capture face data.
         </p>
       </div>
 
       <div class="p-6 pt-0 flex-1 flex flex-col gap-4">
+        <!-- Camera Preview -->
         <div
           class="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center"
         >
@@ -133,31 +134,70 @@
             class="w-full h-full flex flex-col items-center justify-center"
           >
             <i data-lucide="camera" class="h-10 w-10 text-slate-400 mb-2"></i>
-            <p class="text-sm text-slate-500">Camera preview</p>
+            <p class="text-sm text-slate-500">
+              Click "Start Face Capture" to begin
+            </p>
           </div>
+          <img
+            id="enrollment-video"
+            class="hidden w-full h-full object-cover"
+            alt="Face capture feed"
+          />
         </div>
 
-        <div class="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            id="start-enroll-camera"
-            class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2"
-          >
-            Start Camera
-          </button>
-          <button
-            type="button"
-            id="capture-face"
-            disabled
-            class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2"
-          >
-            Capture Face
-          </button>
+        <!-- Progress Section -->
+        <div id="capture-progress-container" class="hidden space-y-2">
+          <div class="flex justify-between text-sm">
+            <span id="capture-instruction" class="font-medium text-slate-700"
+              >Preparing...</span
+            >
+            <span id="capture-count" class="text-slate-500">0/21</span>
+          </div>
+          <div class="w-full bg-slate-200 rounded-full h-2.5">
+            <div
+              id="capture-progress-bar"
+              class="bg-emerald-500 h-2.5 rounded-full transition-all duration-300"
+              style="width: 0%"
+            ></div>
+          </div>
+          <p
+            id="capture-feedback"
+            class="text-sm text-center text-amber-600"
+          ></p>
         </div>
+
+        <!-- Status Message -->
         <p
           id="capture-status"
           class="text-sm text-center text-slate-500 h-5"
         ></p>
+
+        <!-- Buttons -->
+        <div class="flex gap-2">
+          <button
+            type="button"
+            id="start-enroll-camera"
+            class="flex-1 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-slate-900 text-slate-50 hover:bg-slate-900/90 h-10 px-4 py-2"
+          >
+            <i data-lucide="scan-face" class="h-4 w-4"></i>
+            Start Face Capture
+          </button>
+          <button
+            type="button"
+            id="reset-capture"
+            class="hidden inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-3"
+          >
+            <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
+          </button>
+        </div>
+
+        <!-- Hidden input for face encoding -->
+        <input
+          type="hidden"
+          id="face-encoding-data"
+          name="face_encoding"
+          value=""
+        />
 
         <div class="mt-auto pt-4 border-t border-slate-200 flex gap-2">
           <button
@@ -172,6 +212,7 @@
           <button
             type="reset"
             form="enroll-form"
+            id="reset-form-btn"
             class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-3"
           >
             <i data-lucide="rotate-ccw" class="h-4 w-4"></i>

@@ -13,7 +13,6 @@ export async function initDashboard() {
     const endSessionBtn = document.getElementById("end-session-btn");
     let courseCombobox;
     let sessionTimerInterval;
-    let datePickerInstance;
 
     if (startSessionBtn) {
       startSessionBtn.addEventListener("click", () =>
@@ -41,20 +40,6 @@ export async function initDashboard() {
         refreshDashboard(value);
         validateStartSession();
       },
-    });
-
-    // Initialize Flatpickr (Date Time Picker)
-    datePickerInstance = flatpickr("#scheduled-start", {
-      enableTime: true,
-      dateFormat: "Y-m-d H:i",
-      time_24hr: true,
-      minuteIncrement: 5,
-      allowInput: true,
-      altInput: true,
-      altFormat: "F j, Y at h:i K", // e.g. January 4, 2026 at 10:30 PM
-      clickOpens: true,
-      onChange: () => validateStartSession(),
-      // Optional: Can add defaultDate or minDate: "today"
     });
 
     // Initial validation check
@@ -173,13 +158,11 @@ function validateStartSession() {
   const hiddenInput = document.querySelector(
     "#course-combobox input[type=hidden]"
   );
-  const dateInput = document.getElementById("scheduled-start");
 
   const courseSelected = hiddenInput && hiddenInput.value;
-  const dateSelected = dateInput && dateInput.value;
 
   if (startBtn) {
-    if (courseSelected && dateSelected) {
+    if (courseSelected) {
       startBtn.disabled = false;
       startBtn.classList.remove("opacity-50", "pointer-events-none");
     } else {
@@ -216,19 +199,9 @@ async function startSession(courseCombobox) {
     "#course-combobox input[type=hidden]"
   );
   const courseCode = hiddenInput ? hiddenInput.value : null;
-  const scheduledStart = document.getElementById("scheduled-start").value;
 
   if (!courseCode) {
     showToast("Input Required", "Please select a course first.", "error");
-    return;
-  }
-
-  if (!scheduledStart) {
-    showToast(
-      "Input Required",
-      "Please select a scheduled start time.",
-      "error"
-    );
     return;
   }
 
@@ -243,7 +216,6 @@ async function startSession(courseCombobox) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         course_code: courseCode,
-        scheduled_start: scheduledStart,
       }),
     });
 
@@ -419,8 +391,8 @@ function updateSessionUI(session) {
   // Previous UI code (can be removed or adapted if we fully switched)
   if (activeCard) activeCard.classList.add("hidden"); // Ensure old card is hidden if it exists
 
-  // Force dashboard to show this session's context
-  refreshDashboard(session.course_code);
+  // Force dashboard to show this session's context and start polling
+  startAttendancePolling(session.course_code);
 
   // Start Timer - use current time as start for accurate display
   // (The DB start_time may be slightly earlier due to camera initialization delay)
@@ -444,6 +416,26 @@ function updateSessionUI(session) {
   }, 1000);
 }
 
+let attendancePollingInterval;
+
+function startAttendancePolling(courseCode) {
+  if (attendancePollingInterval) clearInterval(attendancePollingInterval);
+  // Initial fetch
+  refreshDashboard(courseCode);
+  // Poll every 5 seconds
+  attendancePollingInterval = setInterval(() => {
+    fetchTodayAttendance(courseCode);
+    fetchStatistics(courseCode);
+  }, 5000);
+}
+
+function stopAttendancePolling() {
+  if (attendancePollingInterval) {
+    clearInterval(attendancePollingInterval);
+    attendancePollingInterval = null;
+  }
+}
+
 function resetSessionUI() {
   const overlay = document.getElementById("session-overlay");
   if (overlay) {
@@ -454,6 +446,8 @@ function resetSessionUI() {
   }
 
   if (timerInterval) clearInterval(timerInterval);
+
+  stopAttendancePolling(); // Stop polling when UI resets
 
   const timerDisplay = document.getElementById("session-timer");
   if (timerDisplay) timerDisplay.textContent = "00:00:00";
@@ -481,13 +475,9 @@ async function loadSessionHistory() {
       const end = session.end_time
         ? new Date(session.end_time).toLocaleString()
         : "Active";
-      const scheduled = session.scheduled_start
-        ? new Date(session.scheduled_start).toLocaleString()
-        : "N/A";
 
       tr.innerHTML = `
                 <td class="p-4 align-middle">${session.course_code}</td>
-                <td class="p-4 align-middle">${scheduled}</td>
                 <td class="p-4 align-middle">${start}</td>
                 <td class="p-4 align-middle">${end}</td>
                 <td class="p-4 align-middle flex gap-2">
@@ -496,7 +486,7 @@ async function loadSessionHistory() {
                     </button>
                     <a href="/api/sessions/${session.id}/export" target="_blank" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
                         <i data-lucide="download" class="h-4 w-4 mr-1"></i> Export
-                    </a>
+                    </button>
                     <button onclick="confirmDeleteSession(${session.id}, '${session.course_code}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 border border-red-200 bg-white hover:bg-red-50 text-red-600 h-9 px-3">
                         <i data-lucide="trash-2" class="h-4 w-4 mr-1"></i> Delete
                     </button>
