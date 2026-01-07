@@ -136,11 +136,14 @@ def gen_frames(user_id):
                         student_id = known_student_ids[best_match_index]
                         
                         # Mark Attendance
-                        db_helper.record_attendance(
+                        result = db_helper.record_attendance(
                             student_id, 
                             status='present', 
                             course_code=active_session['course_code']
                         )
+                        if result:
+                            print(f"✓ Attendance recorded for {name} ({student_id})")
+                        # If result is None, student was already marked present
                 
                 face_names.append(name)
         

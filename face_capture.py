@@ -31,7 +31,7 @@ class GuidedFaceCapture:
     MIN_BRIGHTNESS = 40
     MAX_BRIGHTNESS = 220
     MIN_FACE_RATIO = 0.15  # Face width must be >= 15% of frame width
-    BLUR_THRESHOLD = 50.0  # Laplacian variance threshold
+    BLUR_THRESHOLD = 5.0  # Laplacian variance threshold (very lenient for webcams)
     
     def __init__(self, frames_per_pose=3):
         """
@@ -219,10 +219,10 @@ class GuidedFaceCapture:
         face_height = chin_y - eye_y
         pitch_ratio = (nose_y - eye_y) / face_height
         
-        # Thresholds (tuned empirically)
-        YAW_THRESHOLD = 0.15
-        PITCH_UP_THRESHOLD = 0.35  # Lower value means nose is higher (closer to eyes)
-        PITCH_DOWN_THRESHOLD = 0.55 # Higher value means nose is lower (closer to chin)
+        # Thresholds (tuned empirically - relaxed for typical webcam usage)
+        YAW_THRESHOLD = 0.20  # More lenient for center pose
+        PITCH_UP_THRESHOLD = 0.45  # Lower value means nose is higher (closer to eyes) - relaxed
+        PITCH_DOWN_THRESHOLD = 0.50 # Higher value means nose is lower (closer to chin) - relaxed
         
         if stage_name == 'center' or stage_name == 'neutral':
             if abs(yaw_ratio) > YAW_THRESHOLD:
@@ -233,27 +233,27 @@ class GuidedFaceCapture:
             
         elif stage_name == 'left':
             # User looks left -> Nose moves LEFT in image (smaller X)
-            if yaw_ratio > -0.05: # Not negative enough
-                return {'is_valid': False, 'message': 'Turn head left'}
+            if yaw_ratio > -0.03: # Relaxed - just need slight turn
+                return {'is_valid': False, 'message': 'Turn head slightly left'}
             return {'is_valid': True, 'message': 'Good left pose'}
             
         elif stage_name == 'right':
             # User looks right -> Nose moves RIGHT in image (larger X)
-            if yaw_ratio < 0.05: # Not positive enough
-                return {'is_valid': False, 'message': 'Turn head right'}
+            if yaw_ratio < 0.03: # Relaxed - just need slight turn
+                return {'is_valid': False, 'message': 'Turn head slightly right'}
             return {'is_valid': True, 'message': 'Good right pose'}
             
         elif stage_name == 'up':
             # User looks up -> Nose moves UP (smaller Y relative to face)
             # pitch_ratio decreases
             if pitch_ratio > PITCH_UP_THRESHOLD:
-                return {'is_valid': False, 'message': 'Tilt head up'}
+                return {'is_valid': False, 'message': 'Tilt chin up slightly'}
             return {'is_valid': True, 'message': 'Good up pose'}
             
         elif stage_name == 'down':
             # User looks down -> Nose moves DOWN (larger Y)
             if pitch_ratio < PITCH_DOWN_THRESHOLD:
-                return {'is_valid': False, 'message': 'Tilt head down'}
+                return {'is_valid': False, 'message': 'Look down slightly'}
             return {'is_valid': True, 'message': 'Good down pose'}
             
         elif stage_name == 'smile':

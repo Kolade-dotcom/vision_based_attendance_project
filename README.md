@@ -35,19 +35,22 @@ A Flask-based attendance system using **computer vision** and **face recognition
 - **Session Timer** displaying elapsed time
 - **Session History** with view, export, and delete actions
 - **Session-scoped attendance** - records are linked to specific sessions
+- **Smart Late Detection** - 15-minute grace period from session start; students arriving after are marked "late"
 
 ### 👤 Student Management
 
-- **Enrollment**: Capture face data and student details
+- **Enrollment**: Guided multi-pose face capture with real-time feedback
 - **Edit Profiles**: Update Name, Level, and Matric Number (with cascade updates)
 - **Delete**: Remove students and their attendance history
 - **Recently Enrolled** table with Edit/Delete actions
+- **Loading States**: Visual feedback during face capture initialization
 
 ### 📊 Dashboard & Analytics
 
-- Real-time session attendance table
+- Real-time session attendance table (auto-updates during active sessions)
 - Filter statistics by Level and Course
 - Statistics cards (Present, Late, Total Students)
+- Toast notifications for user feedback
 
 ### 🔌 Hardware Integration
 
@@ -94,11 +97,23 @@ python -m venv venv
    pip install https://github.com/omwaman1/dlib/releases/download/dlib/dlib-19.24.99-cp313-cp313-win_amd64.whl
    ```
 
-2. **Install remaining dependencies**:
+2. **Install setuptools** (required for face_recognition_models):
 
-```powershell
-pip install -r requirements.txt
-```
+   ```powershell
+   pip install --upgrade setuptools
+   ```
+
+3. **Install face_recognition_models**:
+
+   ```powershell
+   pip install git+https://github.com/ageitgey/face_recognition_models
+   ```
+
+4. **Install remaining dependencies**:
+
+   ```powershell
+   pip install -r requirements.txt
+   ```
 
 ### Step 4: Initialize the Database
 

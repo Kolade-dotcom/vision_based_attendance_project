@@ -480,16 +480,18 @@ async function loadSessionHistory() {
                 <td class="p-4 align-middle">${session.course_code}</td>
                 <td class="p-4 align-middle">${start}</td>
                 <td class="p-4 align-middle">${end}</td>
-                <td class="p-4 align-middle flex gap-2">
-                    <button onclick="viewSessionAttendance(${session.id}, '${session.course_code}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
-                        <i data-lucide="eye" class="h-4 w-4 mr-1"></i> View
-                    </button>
-                    <a href="/api/sessions/${session.id}/export" target="_blank" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
-                        <i data-lucide="download" class="h-4 w-4 mr-1"></i> Export
-                    </button>
-                    <button onclick="confirmDeleteSession(${session.id}, '${session.course_code}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 border border-red-200 bg-white hover:bg-red-50 text-red-600 h-9 px-3">
-                        <i data-lucide="trash-2" class="h-4 w-4 mr-1"></i> Delete
-                    </button>
+                <td class="p-4 align-middle">
+                    <div class="flex gap-2">
+                        <button onclick="viewSessionAttendance(${session.id}, '${session.course_code}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
+                            <i data-lucide="eye" class="h-4 w-4 mr-1"></i> View
+                        </button>
+                        <a href="/api/sessions/${session.id}/export" target="_blank" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
+                            <i data-lucide="download" class="h-4 w-4 mr-1"></i> Export
+                        </a>
+                        <button onclick="confirmDeleteSession(${session.id}, '${session.course_code}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 border border-red-200 bg-white hover:bg-red-50 text-red-600 h-9 px-3">
+                            <i data-lucide="trash-2" class="h-4 w-4 mr-1"></i> Delete
+                        </button>
+                    </div>
                 </td>
             `;
       tbody.appendChild(tr);

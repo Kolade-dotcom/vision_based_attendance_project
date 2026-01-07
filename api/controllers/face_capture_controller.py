@@ -79,10 +79,14 @@ def get_face_encoding_logic():
 
 
 def reset_capture_logic():
-    """Reset the face capture session."""
+    """Reset the face capture session and stop camera."""
     user_id = session.get('user_id', 'default')
     if user_id in _enrollment_captures:
         _enrollment_captures[user_id].reset()
+    
+    # Stop camera
+    camera = get_camera()
+    camera.stop()
     
     return jsonify({
         'status': 'success',

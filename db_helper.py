@@ -350,7 +350,7 @@ def record_attendance(student_id, status='present', course_code=None, level=None
         cursor = conn.cursor()
         
         # Check active session
-        active_session_query = "SELECT id, scheduled_start FROM class_sessions WHERE is_active = 1"
+        active_session_query = "SELECT id, start_time FROM class_sessions WHERE is_active = 1"
         active_params = []
         if course_code:
             active_session_query += " AND course_code = ?"
@@ -360,14 +360,14 @@ def record_attendance(student_id, status='present', course_code=None, level=None
         session_row = cursor.fetchone()
         if session_row:
             session_id = session_row['id']
-            # Check for late status if scheduled_start is set
-            if session_row['scheduled_start']:
-                scheduled_time = datetime.fromisoformat(session_row['scheduled_start'])
+            # Check for late status based on session start_time
+            # Grace period: students arriving within 15 minutes of session start are "present"
+            # After 15 minutes from session start, they are marked "late"
+            if session_row['start_time']:
+                session_start = datetime.fromisoformat(session_row['start_time'])
                 current_time = datetime.now()
-                # Late threshold: 15 minutes (or configurable)
-                # But for now let's just say if current > scheduled, it's late? 
-                # Usually there's a grace period. Let's assume 15 mins.
-                if (current_time - scheduled_time).total_seconds() > 900: # 15 mins
+                grace_period_seconds = 900  # 15 minutes grace period
+                if (current_time - session_start).total_seconds() > grace_period_seconds:
                     status = 'late'
         
         # Check if student exists

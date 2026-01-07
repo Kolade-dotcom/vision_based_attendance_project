@@ -75,6 +75,11 @@ async function startGuidedCapture() {
   const resetBtn = document.getElementById("reset-capture");
   const statusEl = document.getElementById("capture-status");
 
+  // Show loading state
+  const originalContent = startBtn.innerHTML;
+  startBtn.disabled = true;
+  startBtn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Starting...`;
+
   try {
     // Call API to start capture session
     const response = await fetch("/api/start_capture", { method: "POST" });
@@ -95,11 +100,19 @@ async function startGuidedCapture() {
     if (resetBtn) resetBtn.classList.remove("hidden");
     if (statusEl) statusEl.textContent = "Follow the on-screen instructions...";
 
+    // Reset button state (hidden but ready for next time)
+    startBtn.disabled = false;
+    startBtn.innerHTML = originalContent;
+
     // Start polling for status
     captureStatusInterval = setInterval(pollCaptureStatus, 500);
   } catch (error) {
     console.error("Error starting capture:", error);
     if (statusEl) statusEl.textContent = "Error: " + error.message;
+    
+    // Restore button on error
+    startBtn.disabled = false;
+    startBtn.innerHTML = originalContent;
   }
 }
 
@@ -136,10 +149,15 @@ async function pollCaptureStatus() {
       // Fetch face encoding
       await fetchFaceEncoding();
 
+      // Show toast instead of status text
+      if (window.showToast) {
+        showToast("Success", "Face capture complete! You can now enroll the student.", "success");
+      }
+      
+      // Hide the status element
       if (statusEl) {
-        statusEl.textContent = "✅ Face capture complete!";
-        statusEl.classList.remove("text-slate-500");
-        statusEl.classList.add("text-emerald-600");
+        statusEl.textContent = "";
+        statusEl.classList.add("hidden");
       }
       if (feedbackEl) feedbackEl.textContent = "";
       if (enrollBtn) enrollBtn.disabled = false;
@@ -206,7 +224,7 @@ async function resetCapture() {
   if (resetBtn) resetBtn.classList.add("hidden");
   if (statusEl) {
     statusEl.textContent = "";
-    statusEl.classList.remove("text-emerald-600");
+    statusEl.classList.remove("text-emerald-600", "hidden");
     statusEl.classList.add("text-slate-500");
   }
   if (enrollBtn) enrollBtn.disabled = true;

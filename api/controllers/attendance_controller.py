@@ -1,13 +1,28 @@
-from flask import jsonify, request
+from flask import jsonify, request, session as flask_session
 import db_helper
 
 def get_attendance_logic():
     """Business logic for fetching current session's attendance."""
     try:
-        # Get attendance for the currently active session only
-        attendance = db_helper.get_attendance_for_active_session()
+        user_id = flask_session.get('user_id')
+        if not user_id:
+            print("DEBUG: No user_id in session")
+            return jsonify({'error': 'Not authenticated'}), 401
+        
+        # Get active session for this user
+        active_session = db_helper.get_active_session(user_id)
+        if not active_session:
+            print(f"DEBUG: No active session for user {user_id}")
+            return jsonify([])
+        
+        print(f"DEBUG: Found active session {active_session['id']} for course {active_session['course_code']}")
+        
+        # Get attendance for this session
+        attendance = db_helper.get_session_attendance(active_session['id'])
+        print(f"DEBUG: Found {len(attendance)} attendance records")
         return jsonify(attendance)
     except Exception as e:
+        print(f"DEBUG: Error in get_attendance_logic: {e}")
         return jsonify({'error': str(e)}), 500
 
 def get_statistics_logic():
