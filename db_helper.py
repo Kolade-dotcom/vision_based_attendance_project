@@ -370,13 +370,24 @@ def record_attendance(student_id, status='present', course_code=None, level=None
                 if (current_time - session_start).total_seconds() > grace_period_seconds:
                     status = 'late'
         
-        # Check if student exists
-        cursor.execute("SELECT id, name, level FROM students WHERE student_id = ?", (student_id,))
+        # Check if student exists and get their enrolled courses
+        cursor.execute("SELECT id, name, level, courses FROM students WHERE student_id = ?", (student_id,))
         student = cursor.fetchone()
         
         if not student:
             print(f"Error: Student {student_id} not found.")
             return None
+        
+        # Check if student is enrolled in this course
+        if course_code and student['courses']:
+            try:
+                enrolled_courses = json.loads(student['courses'])
+                if course_code not in enrolled_courses:
+                    print(f"Student {student_id} is not enrolled in {course_code}. Skipping attendance.")
+                    return None
+            except (json.JSONDecodeError, TypeError):
+                # If courses is invalid JSON, skip validation
+                pass
             
         # If level is not passed, use student's level
         if not level and student['level']:

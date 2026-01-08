@@ -24,9 +24,10 @@ A Flask-based attendance system using **computer vision** and **face recognition
 
 ### 📸 Real-time Face Detection
 
-- Automated attendance marking via webcam
+- Automated attendance marking via **ESP32-CAM wireless streaming**
 - **Optimized detection** with frame resizing (0.25x) and frame skipping
 - Cached Haar Cascade classifier for better performance
+- HOG-based face detector with tracking for stability
 - Green bounding boxes around detected faces
 
 ### 📅 Session Management
@@ -52,9 +53,13 @@ A Flask-based attendance system using **computer vision** and **face recognition
 - Statistics cards (Present, Late, Total Students)
 - Toast notifications for user feedback
 
-### 🔌 Hardware Integration
+### 🔌 Hardware Integration (ESP32-Based)
 
-- Arduino bridge for LEDs, buzzers, and door control
+- **ESP32-CAM**: Wireless video streaming over WiFi
+- **ESP32 DevKit**: Controls LCD display and buzzer
+- **16x2 LCD with I2C**: Displays attendance status and student names
+- **Active Buzzer**: Audio feedback for successful/failed recognition
+- **Wireless Architecture**: No cables between camera and PC
 
 ### 💾 Database
 
@@ -157,7 +162,8 @@ Open your browser and navigate to: **http://localhost:5000**
 ├── /database            # Schema and SQLite DB
 ├── /tests               # Pytest suite (with test isolation)
 ├── app.py               # Application entry point
-├── camera.py            # Vision processing with optimized detection
+├── camera.py            # Vision processing (supports ESP32-CAM stream)
+├── esp32_bridge.py      # WiFi communication with ESP32 hardware
 ├── db_helper.py         # Database utilities
 └── requirements.txt     # Dependencies
 ```
@@ -230,8 +236,13 @@ pytest -v --tb=short
 
 ## 👥 Team
 
-- Mechatronics Project Team
+**MTE 411 - Mechatronics System Design Project**
+
+- **Team Lead**: Salako Akolade
+- **Team Members**: Balogun Azeez, Raji Muhibudeen, Giwa Fuad, Olumuyiwa Timilehin
+- **Supervisor**: Engr. S. Ogundipe
+- **Institution**: Abiola Ajimobi Technical University
 
 ## 📄 License
 
-This project is for educational purposes.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
