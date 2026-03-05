@@ -4,11 +4,14 @@ Handles all SQLite database operations for the attendance system.
 """
 
 import sqlite3
+import logging
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 import os
 import json
 import secrets
+
+logger = logging.getLogger(__name__)
 
 # Import configuration
 try:
@@ -73,7 +76,7 @@ def init_database():
                 conn.execute(
                     "ALTER TABLE class_sessions ADD COLUMN user_id INTEGER DEFAULT 1"
                 )
-                print("Migration: Added user_id column to class_sessions")
+                logger.info("Migration: Added user_id column to class_sessions")
 
         # Check if students table needs migration for self-enrollment columns
         cursor.execute(
@@ -89,27 +92,27 @@ def init_database():
                 conn.execute(
                     "ALTER TABLE students ADD COLUMN status TEXT DEFAULT 'approved'"
                 )
-                print("Migration: Added status column to students")
+                logger.info("Migration: Added status column to students")
 
             if "enrolled_via_link_id" not in columns:
                 conn.execute(
                     "ALTER TABLE students ADD COLUMN enrolled_via_link_id INTEGER"
                 )
-                print("Migration: Added enrolled_via_link_id column to students")
+                logger.info("Migration: Added enrolled_via_link_id column to students")
 
             if "created_by" not in columns:
                 conn.execute("ALTER TABLE students ADD COLUMN created_by INTEGER")
-                print("Migration: Added created_by column to students")
+                logger.info("Migration: Added created_by column to students")
 
             if "rejection_reason" not in columns:
                 conn.execute("ALTER TABLE students ADD COLUMN rejection_reason TEXT")
-                print("Migration: Added rejection_reason column to students")
+                logger.info("Migration: Added rejection_reason column to students")
 
         # Now execute the schema (CREATE IF NOT EXISTS won't modify existing tables)
         conn.executescript(schema)
         conn.commit()
 
-    print("Database initialized successfully!")
+    logger.info("Database initialized successfully!")
 
 
 def create_session(course_code, user_id):
@@ -363,7 +366,7 @@ def add_student(
             conn.commit()
             return cursor.lastrowid
         except sqlite3.IntegrityError:
-            print(f"Error: Student ID {student_id} already exists.")
+            logger.error(f"Student ID {student_id} already exists.")
             return None
 
 
@@ -427,22 +430,7 @@ def record_attendance(student_id, status="present", course_code=None, level=None
         level (str, optional): Level context
     """
 
-    # Determine session_id if active
     session_id = None
-    # We need to find if there is an active session for this course
-    # To avoid circular imports or redundant calls, we can implement lightweight check here or call get_active_session logic
-    # Ideally reuse get_active_session but we are in same file.
-
-    # We can't easily call get_active_session because I defined it below originally?
-    # Ah I am inserting create_session ABOVE. So get_active_session is available if I order it right.
-    # Wait, python allows calling functions defined later? No.
-    # I should have placed them carefully.
-    # Let's just implement the logic inline or rely on global scope if defined above.
-    # Let's assume get_active_session IS available because I inserted it at line 51 (above this function which is at 223).
-
-    # However, Python functions find globals at runtime, so as long as it's defined in module it's fine.
-
-    # But wait, I need to fetch it.
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -485,12 +473,12 @@ def record_attendance(student_id, status="present", course_code=None, level=None
         student = cursor.fetchone()
 
         if not student:
-            print(f"Error: Student {student_id} not found.")
+            logger.error(f"Student {student_id} not found.")
             return None
 
         # Log the student we found for this ID
-        print(
-            f"DEBUG: record_attendance - DB lookup for ID '{student_id}' found student: '{student['name']}'"
+        logger.debug(
+            f"record_attendance - DB lookup for ID '{student_id}' found student: '{student['name']}'"
         )
 
         # Check if student is enrolled in this course
@@ -498,13 +486,13 @@ def record_attendance(student_id, status="present", course_code=None, level=None
             try:
                 enrolled_courses = json.loads(student["courses"])
                 if course_code not in enrolled_courses:
-                    print(
+                    logger.info(
                         f"Student {student_id} is not enrolled in {course_code}. Courses: {enrolled_courses}. Skipping attendance."
                     )
                     return None
             except (json.JSONDecodeError, TypeError):
                 # If courses is invalid JSON, skip validation
-                print(f"Warning: Invalid courses JSON for student {student_id}")
+                logger.warning(f"Invalid courses JSON for student {student_id}")
                 pass
 
         # If level is not passed, use student's level
@@ -522,8 +510,8 @@ def record_attendance(student_id, status="present", course_code=None, level=None
                 # print(f"DEBUG: Student {student_id} already marked present in session {session_id}")
                 return None
         else:
-            print(
-                f"DEBUG: No active session found for course {course_code} when recording attendance"
+            logger.debug(
+                f"No active session found for course {course_code} when recording attendance"
             )
             # If no session ID, we might still record it if design allows, but usually we need a session.
             # Current logic records it with session_id=None if not found.
@@ -544,8 +532,8 @@ def record_attendance(student_id, status="present", course_code=None, level=None
             ),
         )
         conn.commit()
-        print(
-            f"DEBUG: Successfully inserted attendance for {student_id} in session {session_id}"
+        logger.debug(
+            f"Successfully inserted attendance for {student_id} in session {session_id}"
         )
         return {"id": cursor.lastrowid, "status": status, "student_id": student_id}
 
@@ -954,7 +942,7 @@ def get_pending_students_count():
 
 if __name__ == "__main__":
     # Test database operations
-    print("Testing database module...")
+    logger.info("Testing database module...")
 
     # Initialize database
     init_database()
