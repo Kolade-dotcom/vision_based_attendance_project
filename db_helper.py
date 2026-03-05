@@ -1248,23 +1248,24 @@ def get_student_attendance(student_id, course_code=None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         if course_code:
-            rows = cursor.execute(
+            cursor.execute(
                 _q("""SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
                    FROM attendance a
                    JOIN class_sessions cs ON a.session_id = cs.id
                    WHERE a.student_id = ? AND a.course_code = ?
                    ORDER BY a.timestamp DESC"""),
                 (student_id, course_code),
-            ).fetchall()
+            )
         else:
-            rows = cursor.execute(
+            cursor.execute(
                 _q("""SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
                    FROM attendance a
                    JOIN class_sessions cs ON a.session_id = cs.id
                    WHERE a.student_id = ?
                    ORDER BY a.timestamp DESC"""),
                 (student_id,),
-            ).fetchall()
+            )
+        rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
 
@@ -1273,33 +1274,39 @@ def get_student_attendance_stats(student_id, course_code=None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         if course_code:
-            total = cursor.execute(
+            cursor.execute(
                 _q("""SELECT COUNT(DISTINCT cs.id) as cnt FROM class_sessions cs
                    WHERE cs.course_code = ? AND cs.is_active = 0"""),
                 (course_code,),
-            ).fetchone()["cnt"]
-            present = cursor.execute(
+            )
+            total = cursor.fetchone()["cnt"]
+            cursor.execute(
                 _q("""SELECT COUNT(*) as cnt FROM attendance
                    WHERE student_id = ? AND course_code = ? AND status = 'present'"""),
                 (student_id, course_code),
-            ).fetchone()["cnt"]
-            late = cursor.execute(
+            )
+            present = cursor.fetchone()["cnt"]
+            cursor.execute(
                 _q("""SELECT COUNT(*) as cnt FROM attendance
                    WHERE student_id = ? AND course_code = ? AND status = 'late'"""),
                 (student_id, course_code),
-            ).fetchone()["cnt"]
+            )
+            late = cursor.fetchone()["cnt"]
         else:
-            total = cursor.execute(
+            cursor.execute(
                 "SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0"
-            ).fetchone()["cnt"]
-            present = cursor.execute(
+            )
+            total = cursor.fetchone()["cnt"]
+            cursor.execute(
                 _q("SELECT COUNT(*) as cnt FROM attendance WHERE student_id = ? AND status = 'present'"),
                 (student_id,),
-            ).fetchone()["cnt"]
-            late = cursor.execute(
+            )
+            present = cursor.fetchone()["cnt"]
+            cursor.execute(
                 _q("SELECT COUNT(*) as cnt FROM attendance WHERE student_id = ? AND status = 'late'"),
                 (student_id,),
-            ).fetchone()["cnt"]
+            )
+            late = cursor.fetchone()["cnt"]
 
         attended = present + late
         rate = round((attended / total) * 100, 1) if total > 0 else 0
@@ -1372,10 +1379,11 @@ def get_active_session_by_course(course_code):
     """Get active session for a specific course (any lecturer)."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        row = cursor.execute(
+        cursor.execute(
             _q("SELECT * FROM class_sessions WHERE course_code = ? AND is_active = 1"),
             (course_code,),
-        ).fetchone()
+        )
+        row = cursor.fetchone()
         return dict(row) if row else None
 
 
@@ -1383,10 +1391,11 @@ def get_student_session_attendance(student_id, session_id):
     """Get a student's attendance record for a specific session."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        row = cursor.execute(
+        cursor.execute(
             _q("SELECT * FROM attendance WHERE student_id = ? AND session_id = ?"),
             (student_id, session_id),
-        ).fetchone()
+        )
+        row = cursor.fetchone()
         return dict(row) if row else None
 
 
@@ -1400,7 +1409,7 @@ def get_attendance_trend(user_id, course_code=None, limit=10):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         if course_code:
-            sessions = cursor.execute(
+            cursor.execute(
                 _q("""SELECT cs.id, cs.course_code, cs.start_time,
                           COUNT(DISTINCT a.student_id) as attended,
                           (SELECT COUNT(*) FROM students WHERE is_enrolled = 1
@@ -1412,9 +1421,9 @@ def get_attendance_trend(user_id, course_code=None, limit=10):
                    ORDER BY cs.start_time DESC
                    LIMIT ?"""),
                 (user_id, course_code, limit),
-            ).fetchall()
+            )
         else:
-            sessions = cursor.execute(
+            cursor.execute(
                 _q("""SELECT cs.id, cs.course_code, cs.start_time,
                           COUNT(DISTINCT a.student_id) as attended,
                           (SELECT COUNT(*) FROM students WHERE is_enrolled = 1
@@ -1426,7 +1435,8 @@ def get_attendance_trend(user_id, course_code=None, limit=10):
                    ORDER BY cs.start_time DESC
                    LIMIT ?"""),
                 (user_id, limit),
-            ).fetchall()
+            )
+        sessions = cursor.fetchall()
 
         result = []
         for s in sessions:
@@ -1450,12 +1460,13 @@ def get_student_leaderboard(course_code=None, limit=50):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         if course_code:
-            total_sessions = cursor.execute(
+            cursor.execute(
                 _q("SELECT COUNT(*) as cnt FROM class_sessions WHERE course_code = ? AND is_active = 0"),
                 (course_code,),
-            ).fetchone()["cnt"]
+            )
+            total_sessions = cursor.fetchone()["cnt"]
 
-            students = cursor.execute(
+            cursor.execute(
                 _q("""SELECT s.student_id, s.name, s.level,
                           COUNT(a.id) as attended
                    FROM students s
@@ -1465,13 +1476,15 @@ def get_student_leaderboard(course_code=None, limit=50):
                    ORDER BY attended DESC
                    LIMIT ?"""),
                 (course_code, f"%{course_code}%", limit),
-            ).fetchall()
+            )
+            students = cursor.fetchall()
         else:
-            total_sessions = cursor.execute(
+            cursor.execute(
                 "SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0"
-            ).fetchone()["cnt"]
+            )
+            total_sessions = cursor.fetchone()["cnt"]
 
-            students = cursor.execute(
+            cursor.execute(
                 _q("""SELECT s.student_id, s.name, s.level,
                           COUNT(a.id) as attended
                    FROM students s
@@ -1481,7 +1494,8 @@ def get_student_leaderboard(course_code=None, limit=50):
                    ORDER BY attended DESC
                    LIMIT ?"""),
                 (limit,),
-            ).fetchall()
+            )
+            students = cursor.fetchall()
 
         result = []
         for st in students:
@@ -1515,9 +1529,10 @@ def get_lecturer_courses(user_id):
         seen = set()
 
         # 1. Lecturer's own configured courses (highest priority)
-        user = cursor.execute(
+        cursor.execute(
             _q("SELECT courses FROM users WHERE id = ?"), (user_id,)
-        ).fetchone()
+        )
+        user = cursor.fetchone()
         if user and user["courses"]:
             try:
                 lecturer_courses = json.loads(user["courses"])
@@ -1529,9 +1544,10 @@ def get_lecturer_courses(user_id):
                 pass
 
         # 2. Courses from enrolled students
-        rows = cursor.execute(
+        cursor.execute(
             "SELECT DISTINCT courses FROM students WHERE is_enrolled = 1 AND courses IS NOT NULL AND courses != ''"
-        ).fetchall()
+        )
+        rows = cursor.fetchall()
         for row in rows:
             try:
                 student_courses = json.loads(row["courses"])
@@ -1543,10 +1559,11 @@ def get_lecturer_courses(user_id):
                 pass
 
         # 3. Past session courses
-        session_rows = cursor.execute(
+        cursor.execute(
             _q("SELECT DISTINCT course_code FROM class_sessions WHERE user_id = ? ORDER BY course_code"),
             (user_id,),
-        ).fetchall()
+        )
+        session_rows = cursor.fetchall()
         for row in session_rows:
             c = row["course_code"]
             if c and c not in seen:
@@ -1560,7 +1577,7 @@ def get_recent_session_courses(user_id, limit=2):
     """Get the most recently used course codes for quick-start."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        rows = cursor.execute(
+        cursor.execute(
             _q("""SELECT course_code, MAX(start_time) as last_used
                FROM class_sessions
                WHERE user_id = ?
@@ -1568,7 +1585,8 @@ def get_recent_session_courses(user_id, limit=2):
                ORDER BY last_used DESC
                LIMIT ?"""),
             (user_id, limit),
-        ).fetchall()
+        )
+        rows = cursor.fetchall()
         return [row["course_code"] for row in rows]
 
 
