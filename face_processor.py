@@ -211,51 +211,60 @@ def process_multiple_face_images(images_base64):
             'error': error message (if error)
         }
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     encodings = []
     failed_count = 0
-    
+
     for i, image_base64 in enumerate(images_base64):
         try:
             # Remove data URI prefix if present
             if ',' in image_base64:
                 image_base64 = image_base64.split(',')[1]
-            
+
             # Decode base64 to bytes
             image_bytes = base64.b64decode(image_base64)
-            
+            logger.info(f"Image {i}: {len(image_bytes)} bytes after b64 decode")
+
             # Convert to numpy array
             nparr = np.frombuffer(image_bytes, np.uint8)
-            
+
             # Decode image
             image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
+
             if image is None:
+                logger.warning(f"Image {i}: cv2.imdecode returned None")
                 failed_count += 1
                 continue
-            
+
+            logger.info(f"Image {i}: decoded to {image.shape}")
+
             # Horizontal flip for mirror consistency
             image = cv2.flip(image, 1)
-            
+
             # Convert BGR to RGB
             rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
+
             # Detect faces
             face_locations = face_recognition.face_locations(rgb_image, model='hog')
-            
+            logger.info(f"Image {i}: {len(face_locations)} face(s) detected")
+
             if len(face_locations) != 1:
                 failed_count += 1
                 continue
-            
+
             # Get face encoding
             face_encodings = face_recognition.face_encodings(rgb_image, face_locations)
-            
+
             if len(face_encodings) > 0:
                 encodings.append(np.array(face_encodings[0]))
             else:
+                logger.warning(f"Image {i}: face_encodings returned empty")
                 failed_count += 1
-                
+
         except Exception as e:
-            print(f"Error processing image {i}: {e}")
+            logger.error(f"Error processing image {i}: {e}")
             failed_count += 1
             continue
     

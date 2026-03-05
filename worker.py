@@ -237,15 +237,19 @@ def on_auth_fail(data):
 @sio.on("worker:process_faces")
 def on_process_faces(data):
     """Process face frames for enrollment (relayed from cloud)."""
-    logger.info(f"Received face processing request ({len(data.get('frames', []))} frames)")
+    frames = data.get("frames", [])
+    logger.info(f"Received face processing request ({len(frames)} frames)")
+    if frames:
+        sample = frames[0]
+        logger.info(f"  Frame 0: type={type(sample).__name__}, len={len(sample) if isinstance(sample, str) else 'N/A'}, prefix={str(sample)[:80]}...")
     try:
         from face_processor import process_multiple_face_images
 
-        result = process_multiple_face_images(data["frames"])
+        result = process_multiple_face_images(frames)
         sio.emit("worker:faces_processed", result)
         logger.info(f"Face processing complete: {result.get('status')}, {result.get('image_count', 0)} images")
     except Exception as e:
-        logger.error(f"Face processing error: {e}")
+        logger.error(f"Face processing error: {e}", exc_info=True)
         sio.emit("worker:faces_processed", {"status": "error", "error": str(e)})
 
 
