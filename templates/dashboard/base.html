@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Lumina Dashboard{% endblock %}</title>
+
+    <script>
+      (function() {
+        var saved = localStorage.getItem('lumina-theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = saved || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}" />
+
+    <style>
+      /* --- Dashboard Layout -------------------------------------------------- */
+      .dash-layout {
+        display: flex;
+        min-height: 100vh;
+      }
+
+      /* --- Sidebar ----------------------------------------------------------- */
+      .dash-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 240px;
+        display: flex;
+        flex-direction: column;
+        background-color: var(--surface-raised);
+        border-right: 1px solid var(--border);
+        z-index: 30;
+      }
+
+      .dash-sidebar-logo {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-5) var(--space-5) var(--space-4);
+      }
+
+      .dash-sidebar-logo-icon {
+        font-size: var(--text-xl);
+        line-height: 1;
+        color: var(--brand);
+      }
+
+      .dash-sidebar-logo-text {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: 700;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+      }
+
+      /* --- Nav --------------------------------------------------------------- */
+      .dash-nav {
+        flex: 1;
+        padding: var(--space-2) var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+
+      .dash-nav-link {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--text-secondary);
+        text-decoration: none;
+        border-radius: var(--radius-sm);
+        border-left: 3px solid transparent;
+        transition: var(--transition-colors);
+      }
+
+      .dash-nav-link:hover {
+        color: var(--text-primary);
+        background-color: var(--surface-sunken);
+        text-decoration: none;
+      }
+
+      .dash-nav-link:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: -2px;
+      }
+
+      .dash-nav-link[aria-current="page"] {
+        color: var(--brand);
+        border-left-color: var(--brand);
+        background-color: var(--brand-light);
+        font-weight: 600;
+      }
+
+      /* --- User Section ------------------------------------------------------ */
+      .dash-sidebar-user {
+        padding: var(--space-4) var(--space-5);
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+
+      .dash-user-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .dash-user-name {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .dash-user-email {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .dash-theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        background: var(--surface-sunken);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-size: var(--text-base);
+        line-height: 1;
+        transition: var(--transition-colors);
+      }
+
+      .dash-theme-toggle:hover {
+        background-color: var(--border);
+        color: var(--text-primary);
+      }
+
+      .dash-theme-toggle:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 2px;
+      }
+
+      /* --- Content Area ------------------------------------------------------ */
+      .dash-content {
+        flex: 1;
+        margin-left: 240px;
+        min-height: 100vh;
+      }
+
+      .dash-content-inner {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: var(--space-6) var(--space-5);
+      }
+
+      /* --- Mobile Top Bar ---------------------------------------------------- */
+      .dash-topbar {
+        display: none;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background-color: var(--surface-raised);
+        border-bottom: 1px solid var(--border);
+        padding: var(--space-3) var(--space-4);
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .dash-topbar-left,
+      .dash-topbar-right {
+        display: flex;
+        align-items: center;
+      }
+
+      .dash-topbar-center {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .dash-hamburger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-size: var(--text-lg);
+        border-radius: var(--radius-sm);
+        transition: var(--transition-colors);
+      }
+
+      .dash-hamburger:hover {
+        background-color: var(--surface-sunken);
+        color: var(--text-primary);
+      }
+
+      .dash-hamburger:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 2px;
+      }
+
+      /* --- Mobile Drawer & Backdrop ------------------------------------------ */
+      .dash-drawer-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        background-color: rgba(0, 0, 0, 0.4);
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+
+      .dash-drawer-backdrop.is-visible {
+        display: block;
+      }
+
+      .dash-drawer-backdrop.is-open {
+        opacity: 1;
+      }
+
+      .dash-drawer {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 280px;
+        z-index: 50;
+        background-color: var(--surface-raised);
+        box-shadow: var(--shadow-lg);
+        display: flex;
+        flex-direction: column;
+        transform: translateX(-100%);
+        transition: transform 250ms ease;
+      }
+
+      .dash-drawer.is-open {
+        transform: translateX(0);
+      }
+
+      .dash-drawer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-4) var(--space-5);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .dash-drawer-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-muted);
+        font-size: var(--text-lg);
+        border-radius: var(--radius-sm);
+        transition: var(--transition-colors);
+      }
+
+      .dash-drawer-close:hover {
+        background-color: var(--surface-sunken);
+        color: var(--text-primary);
+      }
+
+      .dash-drawer-close:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 2px;
+      }
+
+      .dash-drawer-nav {
+        flex: 1;
+        padding: var(--space-3) var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+
+      .dash-drawer-footer {
+        padding: var(--space-4) var(--space-5);
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+
+      /* --- Responsive -------------------------------------------------------- */
+      @media (max-width: 1023px) {
+        .dash-sidebar {
+          display: none;
+        }
+
+        .dash-topbar {
+          display: flex;
+        }
+
+        .dash-content {
+          margin-left: 0;
+        }
+
+        .dash-content-inner {
+          padding: var(--space-5) var(--space-4);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dash-layout">
+      <!-- Desktop Sidebar -->
+      <aside class="dash-sidebar" aria-label="Main navigation">
+        <div class="dash-sidebar-logo">
+          <span class="dash-sidebar-logo-icon" aria-hidden="true">&#x25CE;</span>
+          <span class="dash-sidebar-logo-text">Lumina</span>
+        </div>
+
+        <nav class="dash-nav" aria-label="Dashboard navigation">
+          <a href="/dashboard/"
+             class="dash-nav-link"
+             {% if request.path == '/dashboard/' or request.path == '/dashboard' %}aria-current="page"{% endif %}>
+            Live Session
+          </a>
+          <a href="/dashboard/analytics"
+             class="dash-nav-link"
+             {% if request.path.startswith('/dashboard/analytics') %}aria-current="page"{% endif %}>
+            Analytics
+          </a>
+          <a href="/dashboard/settings"
+             class="dash-nav-link"
+             {% if request.path.startswith('/dashboard/settings') %}aria-current="page"{% endif %}>
+            Settings
+          </a>
+        </nav>
+
+        <div class="dash-sidebar-user">
+          <div class="dash-user-info">
+            <span class="dash-user-name">{{ session.get('user_name', 'Lecturer') }}</span>
+            <span class="dash-user-email">{{ session.get('user_email', '') }}</span>
+          </div>
+          <button
+            type="button"
+            class="dash-theme-toggle"
+            onclick="toggleTheme()"
+            aria-label="Toggle color theme"
+            title="Toggle theme"
+          >
+            <span class="theme-toggle-icon" aria-hidden="true">&#x1F319;</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Mobile Top Bar -->
+      <header class="dash-topbar">
+        <div class="dash-topbar-left">
+          <button
+            type="button"
+            class="dash-hamburger"
+            id="dash-hamburger-btn"
+            aria-label="Open navigation menu"
+            aria-expanded="false"
+            aria-controls="dash-drawer"
+          >
+            &#x2630;
+          </button>
+        </div>
+        <div class="dash-topbar-center">
+          <span class="dash-sidebar-logo-icon" aria-hidden="true" style="font-size: var(--text-lg); color: var(--brand);">&#x25CE;</span>
+          <span class="dash-sidebar-logo-text" style="font-size: var(--text-lg);">Lumina</span>
+        </div>
+        <div class="dash-topbar-right">
+          <button
+            type="button"
+            class="dash-theme-toggle"
+            onclick="toggleTheme()"
+            aria-label="Toggle color theme"
+            title="Toggle theme"
+          >
+            <span class="theme-toggle-icon" aria-hidden="true">&#x1F319;</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Mobile Drawer Backdrop -->
+      <div class="dash-drawer-backdrop" id="dash-drawer-backdrop" aria-hidden="true"></div>
+
+      <!-- Mobile Drawer -->
+      <aside class="dash-drawer" id="dash-drawer" aria-label="Mobile navigation">
+        <div class="dash-drawer-header">
+          <div style="display: flex; align-items: center; gap: var(--space-3);">
+            <span class="dash-sidebar-logo-icon" aria-hidden="true" style="color: var(--brand);">&#x25CE;</span>
+            <span class="dash-sidebar-logo-text">Lumina</span>
+          </div>
+          <button
+            type="button"
+            class="dash-drawer-close"
+            id="dash-drawer-close"
+            aria-label="Close navigation menu"
+          >
+            &#x2715;
+          </button>
+        </div>
+
+        <nav class="dash-drawer-nav" aria-label="Dashboard navigation">
+          <a href="/dashboard/"
+             class="dash-nav-link"
+             {% if request.path == '/dashboard/' or request.path == '/dashboard' %}aria-current="page"{% endif %}>
+            Live Session
+          </a>
+          <a href="/dashboard/analytics"
+             class="dash-nav-link"
+             {% if request.path.startswith('/dashboard/analytics') %}aria-current="page"{% endif %}>
+            Analytics
+          </a>
+          <a href="/dashboard/settings"
+             class="dash-nav-link"
+             {% if request.path.startswith('/dashboard/settings') %}aria-current="page"{% endif %}>
+            Settings
+          </a>
+        </nav>
+
+        <div class="dash-drawer-footer">
+          <div class="dash-user-info">
+            <span class="dash-user-name">{{ session.get('user_name', 'Lecturer') }}</span>
+            <span class="dash-user-email">{{ session.get('user_email', '') }}</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="dash-content">
+        <div class="dash-content-inner">
+          {% block content %}{% endblock %}
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+    <script>
+      (function() {
+        var hamburger = document.getElementById('dash-hamburger-btn');
+        var drawer = document.getElementById('dash-drawer');
+        var backdrop = document.getElementById('dash-drawer-backdrop');
+        var closeBtn = document.getElementById('dash-drawer-close');
+
+        function openDrawer() {
+          backdrop.classList.add('is-visible');
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              backdrop.classList.add('is-open');
+              drawer.classList.add('is-open');
+            });
+          });
+          hamburger.setAttribute('aria-expanded', 'true');
+          closeBtn.focus();
+        }
+
+        function closeDrawer() {
+          drawer.classList.remove('is-open');
+          backdrop.classList.remove('is-open');
+          hamburger.setAttribute('aria-expanded', 'false');
+          setTimeout(function() {
+            backdrop.classList.remove('is-visible');
+          }, 250);
+          hamburger.focus();
+        }
+
+        if (hamburger) {
+          hamburger.addEventListener('click', openDrawer);
+        }
+        if (closeBtn) {
+          closeBtn.addEventListener('click', closeDrawer);
+        }
+        if (backdrop) {
+          backdrop.addEventListener('click', closeDrawer);
+        }
+
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && drawer.classList.contains('is-open')) {
+            closeDrawer();
+          }
+        });
+
+        /* Sync theme toggle icon on load */
+        var theme = document.documentElement.getAttribute('data-theme');
+        var icons = document.querySelectorAll('.theme-toggle-icon');
+        icons.forEach(function(icon) {
+          icon.textContent = theme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19';
+        });
+      })();
+    </script>
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
