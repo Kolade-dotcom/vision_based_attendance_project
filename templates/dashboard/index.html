@@ -102,6 +102,41 @@
     max-width: 260px;
   }
 
+  /* --- Quick Start --------------------------------------------------------- */
+  .quick-start {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  .quick-start-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .quick-start-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--brand);
+    background-color: var(--brand-light);
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .quick-start-btn:hover {
+    background-color: var(--surface-raised);
+    border-color: var(--brand);
+  }
+
   /* --- Two-Column Layout -------------------------------------------------- */
   .session-columns {
     display: grid;
@@ -320,6 +355,26 @@
     gap: var(--space-3);
     justify-content: flex-end;
   }
+
+  /* --- Worker Status -------------------------------------------------------- */
+  .worker-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+  }
+
+  .worker-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transition: background-color 200ms;
+  }
+
+  .worker-dot.offline { background-color: var(--text-muted); }
+  .worker-dot.idle { background-color: var(--warning); }
+  .worker-dot.capturing { background-color: var(--brand); animation: pulse-dot 1.5s ease-in-out infinite; }
 </style>
 
 <!-- Header Bar -->
@@ -329,6 +384,12 @@
     <!-- Populated by JS: pills or dropdown depending on count -->
   </div>
 </header>
+
+<!-- Quick Start -->
+<div class="quick-start" id="quick-start" style="display: none;" aria-label="Quick start a recent course">
+  <span class="quick-start-label">Quick start</span>
+  <div id="quick-start-buttons"></div>
+</div>
 
 <!-- Session Control Strip -->
 <section class="session-strip" id="session-strip" aria-label="Session controls">
@@ -347,6 +408,9 @@
     <span class="session-student-count" id="session-student-count">0 students</span>
     <span class="session-strip-spacer"></span>
     <button type="button" class="btn btn-danger btn-sm" id="btn-end-session">End Session</button>
+    <span class="worker-status" id="worker-status">
+      <span class="worker-dot offline" id="worker-dot"></span>
+    </span>
   </div>
 </section>
 
@@ -357,12 +421,10 @@
     <!-- Camera Feed -->
     <section class="camera-card" aria-label="Camera feed">
       <div class="camera-aspect">
-        <img
-          src="/video_feed"
-          alt="Live camera feed"
+        <canvas
           id="camera-feed"
-          style="display: none;"
-        />
+          style="display: none; position: absolute; inset: 0; width: 100%; height: 100%;"
+        ></canvas>
         <div class="camera-empty" id="camera-empty">
           Start a session to activate the camera feed
         </div>

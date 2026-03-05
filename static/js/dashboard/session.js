@@ -12,6 +12,7 @@
     pollingTimer: null,
     elapsedTimer: null,
     deleteTargetId: null,
+    recentCourses: [],
   };
 
   // --- DOM refs ---
@@ -44,6 +45,42 @@
     modalDelete: document.getElementById("modal-delete-session"),
     btnConfirmDelete: document.getElementById("btn-confirm-delete"),
   };
+
+  // --- SocketIO ---
+  var socket = typeof io !== "undefined" ? io() : null;
+
+  function renderFrame(frameB64) {
+    var canvas = dom.cameraFeed;
+    if (!canvas || canvas.tagName !== "CANVAS") return;
+    var ctx = canvas.getContext("2d");
+    var img = new Image();
+    img.onload = function () {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+    };
+    img.src = "data:image/jpeg;base64," + frameB64;
+  }
+
+  if (socket) {
+    socket.on("camera:frame", function (data) {
+      if (state.activeSession) {
+        renderFrame(data.frame);
+      }
+    });
+
+    socket.on("worker:status", function (data) {
+      var dot = document.getElementById("worker-dot");
+      if (dot) {
+        dot.className = "worker-dot " + (data.status || "offline");
+      }
+    });
+
+    socket.on("attendance:new", function () {
+      loadAttendance();
+      loadStats();
+    });
+  }
 
   // --- Helpers ---
 
@@ -177,6 +214,12 @@
 
   // --- Course Selector ---
 
+  function formatCourseCode(code) {
+    if (!code) return "";
+    // Add space between letters and digits: "MTE411" → "MTE 411"
+    return code.replace(/([A-Za-z]+)(\d+)/, "$1 $2");
+  }
+
   function extractCoursesFromHistory(history) {
     var seen = {};
     var courses = [];
@@ -188,6 +231,73 @@
       }
     }
     return courses;
+  }
+
+  function loadCoursesFromApi() {
+    apiFetch("/api/dashboard/courses")
+      .then(function (data) {
+        var courses = data.courses || [];
+        var recent = data.recent || [];
+        if (courses.length > 0) {
+          renderCourseSelector(courses);
+        }
+        renderQuickStart(recent);
+      })
+      .catch(function () {
+        // Fall back to extracting from history
+      });
+  }
+
+  function renderQuickStart(recentCourses) {
+    var container = document.getElementById("quick-start");
+    var btnContainer = document.getElementById("quick-start-buttons");
+    if (!container || !btnContainer) return;
+
+    // Hide if session is active or no recent courses
+    if (state.activeSession || recentCourses.length === 0) {
+      container.style.display = "none";
+      return;
+    }
+
+    btnContainer.innerHTML = "";
+    for (var i = 0; i < recentCourses.length; i++) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "quick-start-btn";
+      btn.setAttribute("data-course", recentCourses[i]);
+      btn.textContent = formatCourseCode(recentCourses[i]);
+      btn.addEventListener("click", onQuickStartClick);
+      btnContainer.appendChild(btn);
+    }
+    container.style.display = "flex";
+    state.recentCourses = recentCourses;
+  }
+
+  function onQuickStartClick(e) {
+    var courseCode = e.currentTarget.getAttribute("data-course");
+    if (!courseCode || state.activeSession) return;
+
+    var btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Starting...";
+
+    apiFetch("/api/sessions/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ course_code: courseCode }),
+    })
+      .then(function () {
+        showToast("Session started", "success");
+        checkActiveSession();
+        loadHistory();
+      })
+      .catch(function (err) {
+        showToast(err.message || "Failed to start session", "error");
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = formatCourseCode(courseCode);
+      });
   }
 
   function renderCourseSelector(courses) {
@@ -207,7 +317,7 @@
         pill.className = "course-pill";
         var val = i === 0 ? "all" : courses[i - 1];
         pill.setAttribute("data-course", val);
-        pill.textContent = allCourses[i];
+        pill.textContent = i === 0 ? allCourses[i] : formatCourseCode(allCourses[i]);
         if (val === state.selectedCourse) pill.classList.add("active");
         pill.addEventListener("click", onCoursePillClick);
         pills.appendChild(pill);
@@ -215,7 +325,7 @@
       container.appendChild(pills);
     } else {
       var selectOpts = allCourses.map(function (c, idx) {
-        return { value: idx === 0 ? "all" : courses[idx - 1], label: c };
+        return { value: idx === 0 ? "all" : courses[idx - 1], label: idx === 0 ? c : formatCourseCode(c) };
       });
       new CustomSelect(container, {
         options: selectOpts,
@@ -248,7 +358,7 @@
     if (!container) return;
     var opts = [{ value: "", label: "Select course" }];
     for (var i = 0; i < courses.length; i++) {
-      opts.push({ value: courses[i], label: courses[i] });
+      opts.push({ value: courses[i], label: formatCourseCode(courses[i]) });
     }
     if (sessionCourseDropdown) {
       sessionCourseDropdown.destroy();
@@ -274,11 +384,13 @@
     dom.stripActive.style.display = "flex";
     dom.activeCourseCode.textContent = escapeHtml(session.course_code || "");
 
-    // Camera
+    // Hide quick start
+    var quickStart = document.getElementById("quick-start");
+    if (quickStart) quickStart.style.display = "none";
+
+    // Camera — show canvas
     dom.cameraFeed.style.display = "block";
     dom.cameraEmpty.style.display = "none";
-    // Force reload of feed
-    dom.cameraFeed.src = "/video_feed?" + Date.now();
 
     // Stats
     dom.statsSkeleton.style.display = "none";
@@ -298,7 +410,9 @@
     dom.stripInactive.style.display = "flex";
     dom.stripActive.style.display = "none";
 
-    // Camera
+    // Camera — hide canvas and clear it
+    var ctx = dom.cameraFeed.getContext && dom.cameraFeed.getContext("2d");
+    if (ctx) ctx.clearRect(0, 0, dom.cameraFeed.width, dom.cameraFeed.height);
     dom.cameraFeed.style.display = "none";
     dom.cameraEmpty.style.display = "flex";
 
@@ -316,6 +430,11 @@
 
     stopElapsedTimer();
     stopAttendancePolling();
+
+    // Show quick start again
+    if (state.recentCourses && state.recentCourses.length > 0) {
+      renderQuickStart(state.recentCourses);
+    }
   }
 
   // --- Elapsed Timer ---
@@ -683,5 +802,6 @@
   // --- Init ---
   setGreeting();
   checkActiveSession();
+  loadCoursesFromApi();
   loadHistory();
 })();
