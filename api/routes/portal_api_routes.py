@@ -6,7 +6,7 @@ from api.controllers.portal_auth_controller import (
 from api.controllers.portal_controller import (
     get_home_data_logic, get_attendance_logic, get_profile_logic,
     update_profile_logic, update_face_logic, change_password_logic,
-    complete_enrollment_logic
+    complete_enrollment_logic, process_capture_logic
 )
 
 portal_api_bp = Blueprint('portal_api', __name__, url_prefix='/api/portal')
@@ -58,3 +58,8 @@ def change_password():
 @student_login_required
 def complete_enrollment():
     return complete_enrollment_logic(session['student_id'], request.json)
+
+@portal_api_bp.route('/process-capture', methods=['POST'])
+@student_login_required
+def process_capture():
+    return process_capture_logic(request.json)

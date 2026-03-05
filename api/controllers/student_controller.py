@@ -1,6 +1,6 @@
 import json
 import base64
-from flask import jsonify
+from flask import jsonify, session, request
 import db_helper
 
 def enroll_student_logic(data):
@@ -24,10 +24,15 @@ def enroll_student_logic(data):
             except Exception:
                 return jsonify({'error': 'Invalid face encoding format'}), 400
         
+        # Get current user ID for created_by field
+        user_id = session.get('user_id')
+        
         row_id = db_helper.add_student(
             student_id, name, email, 
             level=level, courses=courses, 
-            face_encoding=face_encoding_bytes
+            face_encoding=face_encoding_bytes,
+            status='approved',  # Direct enrollment is auto-approved
+            created_by=user_id
         )
         
         if row_id is None:
@@ -46,7 +51,10 @@ def enroll_student_logic(data):
 def get_students_logic():
     """Business logic for fetching all students."""
     try:
-        students = db_helper.get_all_students()
+        # Get optional status filter from query params
+        status_filter = request.args.get('status')
+        
+        students = db_helper.get_all_students(status_filter=status_filter)
         # Parse courses JSON string back to list for API response
         for student in students:
             if student.get('courses'):
@@ -93,5 +101,68 @@ def delete_student_logic(student_id):
         else:
             return jsonify({'error': 'Student not found'}), 404
             
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# Student Approval Workflow
+# ============================================================================
+
+def approve_student_logic(student_id):
+    """Approve a pending student enrollment."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    if not student_id:
+        return jsonify({'error': 'Student ID is required'}), 400
+    
+    try:
+        success = db_helper.approve_student(student_id, user_id)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'Student approved successfully'
+            }), 200
+        else:
+            return jsonify({'error': 'Student not found or not pending'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def reject_student_logic(student_id, data=None):
+    """Reject a pending student enrollment."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    if not student_id:
+        return jsonify({'error': 'Student ID is required'}), 400
+    
+    reason = data.get('reason') if data else None
+    
+    try:
+        success = db_helper.reject_student(student_id, user_id, reason)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'Student enrollment rejected'
+            }), 200
+        else:
+            return jsonify({'error': 'Student not found or not pending'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def get_pending_count_logic():
+    """Get count of pending student enrollments."""
+    try:
+        count = db_helper.get_pending_students_count()
+        return jsonify({'count': count}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

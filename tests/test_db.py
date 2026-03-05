@@ -2,6 +2,41 @@ import pytest
 import json
 
 
+# ============================================================================
+# Student Portal Auth & Profile Tests
+# ============================================================================
+
+
+def test_create_student_account(db):
+    student_id = db.create_student_account("125/22/1/0178", "John Doe", "john@uni.edu", "hashed_pw")
+    assert student_id is not None
+    student = db.get_student_by_matric("125/22/1/0178")
+    assert student is not None
+    assert student["name"] == "John Doe"
+    assert student["is_enrolled"] == 0
+    assert student["password_hash"] == "hashed_pw"
+
+
+def test_update_student_enrollment(db):
+    db.create_student_account("125/22/1/0179", "Jane Doe", "jane@uni.edu", "hashed_pw")
+    db.update_student_enrollment("125/22/1/0179", b"fake_encoding", "400", ["MTE411", "MTE412"])
+    student = db.get_student_by_matric("125/22/1/0179")
+    assert student["is_enrolled"] == 1
+    assert student["level"] == "400"
+
+
+def test_get_student_attendance_stats_empty(db):
+    db.create_student_account("125/22/1/0180", "Bob", "bob@uni.edu", "hashed_pw")
+    stats = db.get_student_attendance_stats("125/22/1/0180")
+    assert stats["total_sessions"] == 0
+    assert stats["attendance_rate"] == 0
+
+
+# ============================================================================
+# Original Tests
+# ============================================================================
+
+
 def test_add_and_get_student(db):
     # Using matric number format as requested
     student_id = "125/22/1/0178"

@@ -293,20 +293,26 @@ def test_get_aggregated_encoding_returns_bytes():
 def test_aggregated_encoding_is_average():
     """Aggregated encoding should be the mean of all encodings."""
     from face_capture import GuidedFaceCapture
-    import pickle
-    
     capture = GuidedFaceCapture()
-    
+
     enc1 = np.array([1.0] * 128)
     enc2 = np.array([3.0] * 128)
     capture.add_encoding(enc1)
     capture.add_encoding(enc2)
-    
+
     result_bytes = capture.get_aggregated_encoding()
-    result = pickle.loads(result_bytes)
+    result = np.frombuffer(result_bytes, dtype=np.float64)
     
     expected = np.array([2.0] * 128)
     np.testing.assert_array_almost_equal(result, expected)
+
+
+def test_face_encoding_serialization_roundtrip():
+    """Face encodings serialize via numpy, not pickle."""
+    encoding = np.random.rand(128).astype(np.float64)
+    encoding_bytes = encoding.tobytes()
+    restored = np.frombuffer(encoding_bytes, dtype=np.float64)
+    np.testing.assert_array_almost_equal(encoding, restored)
 
 
 # --- Reset Tests ---

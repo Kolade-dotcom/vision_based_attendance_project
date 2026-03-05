@@ -1,13 +1,148 @@
 """
 Camera Module
-Handles OpenCV webcam capture and face recognition logic.
+Handles OpenCV webcam capture, ESP32-CAM streaming, and face recognition logic.
 """
 
 import cv2
 import numpy as np
+import time
+from typing import Optional, Literal
 
 # Uncomment when face_recognition is installed
 import face_recognition
+
+# Import configuration
+try:
+    import config
+except ImportError:
+    config = None
+
+
+class ESP32Camera:
+    """
+    Handles video capture from ESP32-CAM MJPEG stream.
+    
+    This class reads frames from an ESP32-CAM over WiFi using the MJPEG stream.
+    It provides the same interface as the Camera class for easy swapping.
+    """
+    
+    def __init__(self, stream_url: str, timeout: int = 10, retry_delay: float = 2.0):
+        """
+        Initialize the ESP32 camera.
+        
+        Args:
+            stream_url: URL of the MJPEG stream (e.g., "http://192.168.1.100:81/stream")
+            timeout: Connection timeout in seconds
+            retry_delay: Delay between reconnection attempts
+        """
+        self.stream_url = stream_url
+        self.timeout = timeout
+        self.retry_delay = retry_delay
+        self.video_capture: Optional[cv2.VideoCapture] = None
+        self.is_connected = False
+        self.last_frame: Optional[np.ndarray] = None
+        self.consecutive_failures = 0
+        self.max_failures = 5
+    
+    def start(self) -> bool:
+        """
+        Start the video capture from ESP32-CAM stream.
+        
+        Returns:
+            bool: True if connection successful
+        """
+        if self.video_capture is not None and self.video_capture.isOpened():
+            return True  # Already started
+        
+        print(f"Connecting to ESP32-CAM stream: {self.stream_url}")
+        
+        # OpenCV can directly open MJPEG streams
+        self.video_capture = cv2.VideoCapture(self.stream_url)
+        
+        # Set timeout for stream reading
+        self.video_capture.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self.timeout * 1000)
+        self.video_capture.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, self.timeout * 1000)
+        
+        if not self.video_capture.isOpened():
+            print(f"Failed to connect to ESP32-CAM at {self.stream_url}")
+            self.video_capture = None
+            return False
+        
+        self.is_connected = True
+        self.consecutive_failures = 0
+        print("ESP32-CAM stream connected successfully")
+        return True
+    
+    def stop(self):
+        """Stop the video capture and release resources."""
+        if self.video_capture is not None:
+            self.video_capture.release()
+            self.video_capture = None
+        self.is_connected = False
+        self.last_frame = None
+        print("ESP32-CAM stream disconnected")
+    
+    def get_frame(self) -> Optional[np.ndarray]:
+        """
+        Capture a single frame from the ESP32-CAM stream.
+        
+        Returns:
+            numpy.ndarray: The captured frame (BGR), or None if capture failed
+        """
+        if self.video_capture is None or not self.video_capture.isOpened():
+            # Try to reconnect
+            if not self._try_reconnect():
+                return self.last_frame  # Return cached frame if available
+        
+        ret, frame = self.video_capture.read()
+        
+        if not ret or frame is None:
+            self.consecutive_failures += 1
+            print(f"ESP32-CAM frame read failed ({self.consecutive_failures}/{self.max_failures})")
+            
+            if self.consecutive_failures >= self.max_failures:
+                print("Max failures reached, attempting reconnection...")
+                self._try_reconnect()
+            
+            return self.last_frame  # Return last good frame
+        
+        # Success - reset failure counter and cache frame
+        self.consecutive_failures = 0
+        self.last_frame = frame
+        return frame
+    
+    def _try_reconnect(self) -> bool:
+        """
+        Attempt to reconnect to the ESP32-CAM stream.
+        
+        Returns:
+            bool: True if reconnection successful
+        """
+        print(f"Attempting to reconnect to ESP32-CAM...")
+        self.stop()
+        time.sleep(self.retry_delay)
+        return self.start()
+    
+    def is_available(self) -> bool:
+        """Check if the ESP32-CAM stream is available."""
+        return self.is_connected and self.video_capture is not None
+    
+    def get_frame_bytes(self) -> Optional[bytes]:
+        """
+        Get frame as JPEG bytes for streaming.
+        
+        Returns:
+            bytes: JPEG-encoded frame data, or None if failed
+        """
+        frame = self.get_frame()
+        if frame is None:
+            return None
+        
+        ret, buffer = cv2.imencode('.jpg', frame)
+        if not ret:
+            return None
+        
+        return buffer.tobytes()
 
 
 class Camera:
@@ -302,13 +437,85 @@ class FaceDetector:
 
 # Global Singleton Instance
 _camera_instance = None
+_camera_source: Optional[str] = None
 
-def get_camera():
-    """Get or create the global camera instance."""
-    global _camera_instance
-    if _camera_instance is None:
-        _camera_instance = Camera()
+
+def get_camera(source: Optional[str] = None, force_new: bool = False):
+    """
+    Get or create the global camera instance.
+    
+    Supports multiple camera sources:
+    - "esp32": Use ESP32-CAM MJPEG stream
+    - "webcam": Use local webcam
+    - "auto": Try ESP32-CAM first, fallback to webcam
+    - None: Use configuration from config.py
+    
+    Args:
+        source: Camera source to use ("esp32", "webcam", "auto", or None for config)
+        force_new: If True, create a new instance even if one exists
+    
+    Returns:
+        Camera or ESP32Camera instance
+    """
+    global _camera_instance, _camera_source
+    
+    # Determine source from config if not specified
+    if source is None:
+        if config is not None:
+            source = config.CAMERA_SOURCE
+        else:
+            source = "webcam"  # Default fallback
+    
+    # Return existing instance if source hasn't changed
+    if not force_new and _camera_instance is not None and _camera_source == source:
+        return _camera_instance
+    
+    # Stop existing camera if switching sources
+    if _camera_instance is not None:
+        _camera_instance.stop()
+        _camera_instance = None
+    
+    _camera_source = source
+    
+    if source == "esp32":
+        # Use ESP32-CAM stream
+        stream_url = config.ESP32_CAM_STREAM_URL if config else "http://192.168.1.100:81/stream"
+        _camera_instance = ESP32Camera(stream_url=stream_url)
+        
+    elif source == "webcam":
+        # Use local webcam
+        webcam_index = config.WEBCAM_INDEX if config else 0
+        _camera_instance = Camera(camera_index=webcam_index)
+        
+    elif source == "auto":
+        # Try ESP32-CAM first, fallback to webcam
+        stream_url = config.ESP32_CAM_STREAM_URL if config else "http://192.168.1.100:81/stream"
+        esp32_cam = ESP32Camera(stream_url=stream_url)
+        
+        try:
+            if esp32_cam.start():
+                print("Using ESP32-CAM stream")
+                _camera_instance = esp32_cam
+            else:
+                raise RuntimeError("ESP32-CAM not available")
+        except Exception as e:
+            print(f"ESP32-CAM not available ({e}), falling back to webcam")
+            esp32_cam.stop()
+            webcam_index = config.WEBCAM_INDEX if config else 0
+            _camera_instance = Camera(camera_index=webcam_index)
+    else:
+        raise ValueError(f"Unknown camera source: {source}")
+    
     return _camera_instance
+
+
+def reset_camera():
+    """Reset the camera instance (useful for switching sources)."""
+    global _camera_instance, _camera_source
+    if _camera_instance is not None:
+        _camera_instance.stop()
+        _camera_instance = None
+    _camera_source = None
 
 
 def detect_faces(frame):
@@ -360,13 +567,21 @@ def draw_face_boxes(frame, faces, color=(0, 255, 0), thickness=2):
 
 
 if __name__ == '__main__':
-    # Test camera functionality
-    print("Testing camera module...")
+    import sys
     
-    cam = get_camera()
+    # Parse command line arguments
+    source = "webcam"  # Default
+    if len(sys.argv) > 1:
+        source = sys.argv[1]
+    
+    print(f"Testing camera module with source: {source}")
+    print("=" * 50)
+    
+    cam = get_camera(source=source)
     try:
         cam.start()
         print("Camera started successfully!")
+        print(f"Camera type: {type(cam).__name__}")
         
         # Capture a test frame
         frame = cam.get_frame()
@@ -376,6 +591,21 @@ if __name__ == '__main__':
             # Try face detection
             faces = detect_faces(frame)
             print(f"Faces detected: {len(faces)}")
+            
+            # Show frame in window (press 'q' to quit)
+            print("\nShowing live feed (press 'q' to quit)...")
+            while True:
+                frame = cam.get_frame()
+                if frame is not None:
+                    # Draw face boxes
+                    faces = detect_faces(frame)
+                    frame = draw_face_boxes(frame, faces)
+                    cv2.imshow('Camera Test', frame)
+                
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            
+            cv2.destroyAllWindows()
         else:
             print("Failed to capture frame")
     except Exception as e:
@@ -383,3 +613,6 @@ if __name__ == '__main__':
     finally:
         cam.stop()
         print("Camera stopped")
+    
+    print("\nUsage: python camera.py [source]")
+    print("  source: 'webcam', 'esp32', or 'auto'")

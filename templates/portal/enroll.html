@@ -1,1 +1,542 @@
-<!DOCTYPE html><html><body><h1>Enrollment</h1><p>Coming soon</p></body></html>
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Set up face recognition — Lumina</title>
+
+    <script>
+      (function() {
+        var saved = localStorage.getItem('lumina-theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = saved || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}" />
+
+    <style>
+      /* === Enrollment onboarding layout === */
+
+      .enroll-page {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: var(--space-5) var(--space-4) var(--space-7);
+        background-color: var(--surface);
+      }
+
+      .enroll-container {
+        width: 100%;
+        max-width: 480px;
+      }
+
+      /* --- Logo --- */
+
+      .enroll-logo {
+        text-align: center;
+        margin-bottom: var(--space-6);
+        padding-top: var(--space-4);
+      }
+
+      .enroll-logo-mark {
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        font-weight: 700;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+        line-height: 1;
+      }
+
+      .enroll-logo-mark span {
+        color: var(--brand);
+      }
+
+      /* --- Steps (hidden/shown) --- */
+
+      .enroll-step {
+        display: none;
+      }
+
+      .enroll-step.active {
+        display: block;
+      }
+
+      /* --- Step 1: Welcome --- */
+
+      .welcome-heading {
+        text-align: center;
+        margin-bottom: var(--space-3);
+      }
+
+      .welcome-text {
+        text-align: center;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        line-height: 1.6;
+        margin-bottom: var(--space-6);
+      }
+
+      .welcome-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 80px;
+        margin: 0 auto var(--space-5);
+        background-color: var(--brand-light);
+        border-radius: var(--radius-full);
+      }
+
+      .welcome-icon svg {
+        width: 40px;
+        height: 40px;
+        color: var(--brand);
+      }
+
+      /* --- Step 2: Camera capture --- */
+
+      .capture-instruction {
+        text-align: center;
+        font-size: var(--text-lg);
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: var(--space-4);
+        min-height: 2em;
+      }
+
+      .camera-viewport {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 3 / 4;
+        max-width: 480px;
+        margin: 0 auto var(--space-4);
+        background-color: var(--surface-sunken);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+
+      .camera-viewport video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform: scaleX(-1);
+      }
+
+      .camera-viewport canvas {
+        display: none;
+      }
+
+      .oval-guide {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+
+      .oval-guide svg {
+        width: 70%;
+        height: 70%;
+      }
+
+      .capture-progress {
+        text-align: center;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin-bottom: var(--space-4);
+        min-height: 1.4em;
+      }
+
+      /* --- Dot stepper --- */
+
+      .dot-stepper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        margin-bottom: var(--space-5);
+      }
+
+      .dot-stepper .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: var(--radius-full);
+        border: 2px solid var(--border-strong);
+        background-color: transparent;
+        transition: var(--transition-colors);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .dot-stepper .dot.current {
+        border-color: var(--brand);
+        background-color: var(--brand);
+      }
+
+      .dot-stepper .dot.completed {
+        border-color: var(--brand);
+        background-color: var(--brand);
+      }
+
+      .dot-stepper .dot.completed svg {
+        width: 8px;
+        height: 8px;
+        color: var(--text-inverse);
+      }
+
+      /* --- Step 3: Details form --- */
+
+      .details-heading {
+        text-align: center;
+        margin-bottom: var(--space-5);
+      }
+
+      .form-group {
+        margin-bottom: var(--space-4);
+      }
+
+      .form-group:last-of-type {
+        margin-bottom: var(--space-5);
+      }
+
+      .course-input-row {
+        display: flex;
+        gap: var(--space-2);
+      }
+
+      .course-input-row .input {
+        flex: 1;
+      }
+
+      .course-input-row .btn {
+        flex-shrink: 0;
+      }
+
+      .chip-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: var(--space-1) var(--space-3);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        background-color: var(--brand-light);
+        color: var(--brand);
+        border-radius: var(--radius-full);
+      }
+
+      .chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        margin: 0;
+        border: none;
+        border-radius: var(--radius-full);
+        background: none;
+        color: var(--brand);
+        cursor: pointer;
+        font-size: var(--text-base);
+        line-height: 1;
+        transition: var(--transition-colors);
+      }
+
+      .chip-remove:hover {
+        background-color: var(--brand-muted);
+      }
+
+      .chip-remove:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 1px;
+      }
+
+      /* --- Step 4: Confirmation --- */
+
+      .confirm-center {
+        text-align: center;
+        padding-top: var(--space-6);
+      }
+
+      .checkmark-circle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 96px;
+        height: 96px;
+        margin: 0 auto var(--space-5);
+        background-color: var(--brand-light);
+        border-radius: var(--radius-full);
+        animation: check-pop 400ms ease-out;
+      }
+
+      .checkmark-circle svg {
+        width: 48px;
+        height: 48px;
+        color: var(--brand);
+        stroke-dasharray: 50;
+        stroke-dashoffset: 50;
+        animation: check-draw 500ms 200ms ease forwards;
+      }
+
+      @keyframes check-pop {
+        0% { transform: scale(0.5); opacity: 0; }
+        60% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+
+      @keyframes check-draw {
+        to { stroke-dashoffset: 0; }
+      }
+
+      .confirm-heading {
+        margin-bottom: var(--space-5);
+      }
+
+      .summary-card {
+        text-align: left;
+        margin-bottom: var(--space-6);
+      }
+
+      .summary-row {
+        display: flex;
+        justify-content: space-between;
+        padding: var(--space-3) 0;
+        border-bottom: 1px solid var(--border);
+        font-size: var(--text-sm);
+      }
+
+      .summary-row:last-child {
+        border-bottom: none;
+      }
+
+      .summary-label {
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      .summary-value {
+        color: var(--text-primary);
+        font-weight: 600;
+        text-align: right;
+      }
+
+      /* --- Shared button bar --- */
+
+      .btn-block {
+        width: 100%;
+      }
+
+      .btn-bar {
+        display: flex;
+        gap: var(--space-3);
+      }
+
+      .btn-bar .btn {
+        flex: 1;
+      }
+
+      /* --- Error banner --- */
+
+      .enroll-error {
+        display: none;
+        padding: var(--space-3);
+        margin-bottom: var(--space-4);
+        font-size: var(--text-sm);
+        color: var(--danger);
+        background-color: var(--danger-light);
+        border: 1px solid var(--danger);
+        border-radius: var(--radius-sm);
+      }
+
+      .enroll-error.visible {
+        display: block;
+      }
+
+      /* --- Loading spinner --- */
+
+      .btn .spinner {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: var(--radius-full);
+        animation: spin 600ms linear infinite;
+      }
+
+      .btn.loading .spinner {
+        display: inline-block;
+      }
+
+      .btn.loading .btn-label {
+        visibility: hidden;
+        width: 0;
+        overflow: hidden;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="enroll-page">
+      <div class="enroll-container">
+        <!-- Logo -->
+        <div class="enroll-logo">
+          <div class="enroll-logo-mark"><span>&#9678;</span> Lumina</div>
+        </div>
+
+        <!-- ==================== Step 1: Welcome ==================== -->
+        <section id="step-welcome" class="enroll-step active" aria-label="Welcome">
+          <div class="welcome-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+            </svg>
+          </div>
+          <h2 class="welcome-heading">Set up face recognition</h2>
+          <p class="welcome-text">
+            We'll take a few photos from different angles to set up facial
+            recognition for automatic attendance. This only takes about a minute.
+          </p>
+          <div id="welcome-error" class="enroll-error" role="alert"></div>
+          <button type="button" id="btn-start-camera" class="btn btn-primary btn-lg btn-block">
+            <span class="spinner"></span>
+            <span class="btn-label">Start Camera</span>
+          </button>
+        </section>
+
+        <!-- ==================== Step 2: Guided Capture ==================== -->
+        <section id="step-capture" class="enroll-step" aria-label="Face capture">
+          <p id="capture-instruction" class="capture-instruction">Look straight at the camera</p>
+
+          <div class="camera-viewport" id="camera-viewport">
+            <video id="camera-video" playsinline autoplay muted></video>
+            <canvas id="capture-canvas"></canvas>
+            <div class="oval-guide" aria-hidden="true">
+              <svg viewBox="0 0 200 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="100" cy="130" rx="72" ry="95"
+                  stroke="var(--brand)" stroke-width="2.5" stroke-dasharray="8 4"
+                  fill="none" opacity="0.6" />
+              </svg>
+            </div>
+          </div>
+
+          <p id="capture-progress" class="capture-progress"></p>
+
+          <div class="dot-stepper" id="dot-stepper" role="group" aria-label="Capture progress"></div>
+
+          <div id="capture-error" class="enroll-error" role="alert"></div>
+
+          <div class="btn-bar">
+            <button type="button" id="btn-capture-back" class="btn btn-secondary btn-lg">Back</button>
+            <button type="button" id="btn-capture-skip" class="btn btn-ghost btn-lg" style="display:none;">
+              Skip pose
+            </button>
+          </div>
+        </section>
+
+        <!-- ==================== Step 3: Academic Details ==================== -->
+        <section id="step-details" class="enroll-step" aria-label="Academic details">
+          <h2 class="details-heading">Almost done! Add your details</h2>
+
+          <div id="details-error" class="enroll-error" role="alert"></div>
+
+          <div class="form-group">
+            <label for="level-select" class="label">Level</label>
+            <select id="level-select" class="input" required>
+              <option value="" disabled selected>Select your level</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="300">300</option>
+              <option value="400">400</option>
+              <option value="500">500</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="course-input" class="label">Courses</label>
+            <div class="course-input-row">
+              <input
+                type="text"
+                id="course-input"
+                class="input"
+                placeholder="e.g. MTE411"
+                autocomplete="off"
+              />
+              <button type="button" id="btn-add-course" class="btn btn-secondary">Add</button>
+            </div>
+            <div id="chip-list" class="chip-list"></div>
+          </div>
+
+          <div class="btn-bar">
+            <button type="button" id="btn-details-back" class="btn btn-secondary btn-lg">Back</button>
+            <button type="button" id="btn-details-submit" class="btn btn-primary btn-lg">
+              <span class="spinner"></span>
+              <span class="btn-label">Complete setup</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- ==================== Step 4: Confirmation ==================== -->
+        <section id="step-confirm" class="enroll-step" aria-label="Enrollment complete">
+          <div class="confirm-center">
+            <div class="checkmark-circle">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
+            </div>
+            <h2 class="confirm-heading">You're all set!</h2>
+          </div>
+
+          <div class="summary-card card card-padded">
+            <div class="summary-row">
+              <span class="summary-label">Name</span>
+              <span class="summary-value" id="summary-name"></span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Matric Number</span>
+              <span class="summary-value" id="summary-matric"></span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Level</span>
+              <span class="summary-value" id="summary-level"></span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Courses</span>
+              <span class="summary-value" id="summary-courses"></span>
+            </div>
+          </div>
+
+          <button type="button" id="btn-go-home" class="btn btn-primary btn-lg btn-block">
+            Go to Home
+          </button>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      window.__STUDENT__ = {
+        name: {{ session.get('student_name', '') | tojson }},
+        matric: {{ session.get('student_id', '') | tojson }}
+      };
+    </script>
+    <script src="{{ url_for('static', filename='js/portal/enroll.js') }}"></script>
+  </body>
+</html>

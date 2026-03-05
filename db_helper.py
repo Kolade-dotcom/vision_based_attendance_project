@@ -108,6 +108,27 @@ def init_database():
                 conn.execute("ALTER TABLE students ADD COLUMN rejection_reason TEXT")
                 logger.info("Migration: Added rejection_reason column to students")
 
+            if "password_hash" not in columns:
+                conn.execute("ALTER TABLE students ADD COLUMN password_hash TEXT")
+                logger.info("Migration: Added password_hash column to students")
+
+            if "is_enrolled" not in columns:
+                conn.execute("ALTER TABLE students ADD COLUMN is_enrolled INTEGER DEFAULT 0")
+                logger.info("Migration: Added is_enrolled column to students")
+
+        # Check if users table needs courses column
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+        )
+        users_exists = cursor.fetchone() is not None
+
+        if users_exists:
+            cursor.execute("PRAGMA table_info(users)")
+            user_columns = [info[1] for info in cursor.fetchall()]
+            if "courses" not in user_columns:
+                conn.execute("ALTER TABLE users ADD COLUMN courses TEXT")
+                logger.info("Migration: Added courses column to users")
+
         # Now execute the schema (CREATE IF NOT EXISTS won't modify existing tables)
         conn.executescript(schema)
         conn.commit()
@@ -215,6 +236,78 @@ def get_user_by_email(email):
         if row:
             return dict(row)
         return None
+
+
+def get_user_settings(user_id):
+    """Get user settings including courses and system settings."""
+    with get_db_connection() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        settings = {}
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        for row in rows:
+            settings[row["key"]] = row["value"]
+
+        courses = json.loads(user["courses"]) if user and user["courses"] else []
+        return {
+            "user": {
+                "name": user["name"] if user else "",
+                "email": user["email"] if user else "",
+                "courses": courses,
+            },
+            "late_threshold_minutes": int(settings.get("late_threshold_minutes", 15)),
+            "camera_source": settings.get("camera_source", "auto"),
+            "esp32_ip": settings.get("esp32_ip", "192.168.1.100"),
+        }
+
+
+def update_user_settings(user_id, data):
+    """Update user settings."""
+    with get_db_connection() as conn:
+        if "late_threshold_minutes" in data:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+                ("late_threshold_minutes", str(data["late_threshold_minutes"])),
+            )
+        if "camera_source" in data:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+                ("camera_source", data["camera_source"]),
+            )
+        if "esp32_ip" in data:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+                ("esp32_ip", data["esp32_ip"]),
+            )
+        if "courses" in data:
+            courses_json = (
+                json.dumps(data["courses"])
+                if isinstance(data["courses"], list)
+                else data["courses"]
+            )
+            conn.execute(
+                "UPDATE users SET courses = ? WHERE id = ?", (courses_json, user_id)
+            )
+        conn.commit()
+
+
+def update_user_account(user_id, name=None, email=None):
+    """Update user account info."""
+    with get_db_connection() as conn:
+        if name:
+            conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+        if email:
+            conn.execute("UPDATE users SET email = ? WHERE id = ?", (email, user_id))
+        conn.commit()
+
+
+def update_user_password(user_id, password_hash):
+    """Update user password."""
+    with get_db_connection() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (password_hash, user_id),
+        )
+        conn.commit()
 
 
 def update_student(current_student_id, new_student_id, name, level=None, courses=None):
@@ -938,6 +1031,307 @@ def get_pending_students_count():
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM students WHERE status = 'pending'")
         return cursor.fetchone()[0]
+
+
+# ============================================================================
+# Student Portal Auth & Profile Functions
+# ============================================================================
+
+
+def get_student_by_matric(matric_number):
+    """Get student by matric number (student_id)."""
+    with get_db_connection() as conn:
+        student = conn.execute(
+            "SELECT * FROM students WHERE student_id = ?", (matric_number,)
+        ).fetchone()
+        return dict(student) if student else None
+
+
+def create_student_account(matric_number, name, email, password_hash):
+    """Create a student account (no face encoding yet)."""
+    with get_db_connection() as conn:
+        now = datetime.now().isoformat()
+        cursor = conn.execute(
+            """INSERT INTO students (student_id, name, email, password_hash, status, is_enrolled, created_at)
+               VALUES (?, ?, ?, ?, 'approved', 0, ?)""",
+            (matric_number, name, email, password_hash, now),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def update_student_enrollment(student_id, face_encoding, level, courses):
+    """Mark student as enrolled with face encoding and academic details."""
+    with get_db_connection() as conn:
+        courses_json = json.dumps(courses) if isinstance(courses, list) else courses
+        conn.execute(
+            """UPDATE students
+               SET face_encoding = ?, level = ?, courses = ?, is_enrolled = 1, updated_at = ?
+               WHERE student_id = ?""",
+            (face_encoding, level, courses_json, datetime.now().isoformat(), student_id),
+        )
+        conn.commit()
+
+
+def get_student_attendance(student_id, course_code=None):
+    """Get attendance records for a student, optionally filtered by course."""
+    with get_db_connection() as conn:
+        if course_code:
+            rows = conn.execute(
+                """SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
+                   FROM attendance a
+                   JOIN class_sessions cs ON a.session_id = cs.id
+                   WHERE a.student_id = ? AND a.course_code = ?
+                   ORDER BY a.timestamp DESC""",
+                (student_id, course_code),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
+                   FROM attendance a
+                   JOIN class_sessions cs ON a.session_id = cs.id
+                   WHERE a.student_id = ?
+                   ORDER BY a.timestamp DESC""",
+                (student_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_student_attendance_stats(student_id, course_code=None):
+    """Get attendance stats for a student."""
+    with get_db_connection() as conn:
+        if course_code:
+            total = conn.execute(
+                """SELECT COUNT(DISTINCT cs.id) FROM class_sessions cs
+                   WHERE cs.course_code = ? AND cs.is_active = 0""",
+                (course_code,),
+            ).fetchone()[0]
+            present = conn.execute(
+                """SELECT COUNT(*) FROM attendance
+                   WHERE student_id = ? AND course_code = ? AND status = 'present'""",
+                (student_id, course_code),
+            ).fetchone()[0]
+            late = conn.execute(
+                """SELECT COUNT(*) FROM attendance
+                   WHERE student_id = ? AND course_code = ? AND status = 'late'""",
+                (student_id, course_code),
+            ).fetchone()[0]
+        else:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM class_sessions WHERE is_active = 0"
+            ).fetchone()[0]
+            present = conn.execute(
+                "SELECT COUNT(*) FROM attendance WHERE student_id = ? AND status = 'present'",
+                (student_id,),
+            ).fetchone()[0]
+            late = conn.execute(
+                "SELECT COUNT(*) FROM attendance WHERE student_id = ? AND status = 'late'",
+                (student_id,),
+            ).fetchone()[0]
+
+        attended = present + late
+        rate = round((attended / total) * 100, 1) if total > 0 else 0
+        return {
+            "total_sessions": total,
+            "present": present,
+            "late": late,
+            "absent": total - attended,
+            "attendance_rate": rate,
+        }
+
+
+def update_student_profile(student_id, name=None, email=None, level=None, courses=None):
+    """Update student profile fields."""
+    with get_db_connection() as conn:
+        updates = []
+        params = []
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+        if email is not None:
+            updates.append("email = ?")
+            params.append(email)
+        if level is not None:
+            updates.append("level = ?")
+            params.append(level)
+        if courses is not None:
+            updates.append("courses = ?")
+            params.append(json.dumps(courses) if isinstance(courses, list) else courses)
+
+        if not updates:
+            return False
+
+        updates.append("updated_at = ?")
+        params.append(datetime.now().isoformat())
+        params.append(student_id)
+
+        conn.execute(
+            f"UPDATE students SET {', '.join(updates)} WHERE student_id = ?",
+            params,
+        )
+        conn.commit()
+        return True
+
+
+def update_student_face(student_id, face_encoding):
+    """Update student face encoding (re-capture)."""
+    with get_db_connection() as conn:
+        conn.execute(
+            "UPDATE students SET face_encoding = ?, updated_at = ? WHERE student_id = ?",
+            (face_encoding, datetime.now().isoformat(), student_id),
+        )
+        conn.commit()
+
+
+def update_student_password(student_id, password_hash):
+    """Update student password."""
+    with get_db_connection() as conn:
+        conn.execute(
+            "UPDATE students SET password_hash = ?, updated_at = ? WHERE student_id = ?",
+            (password_hash, datetime.now().isoformat(), student_id),
+        )
+        conn.commit()
+
+
+def get_active_session_by_course(course_code):
+    """Get active session for a specific course (any lecturer)."""
+    with get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM class_sessions WHERE course_code = ? AND is_active = 1",
+            (course_code,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_student_session_attendance(student_id, session_id):
+    """Get a student's attendance record for a specific session."""
+    with get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM attendance WHERE student_id = ? AND session_id = ?",
+            (student_id, session_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+# ============================================================================
+# Analytics Functions
+# ============================================================================
+
+
+def get_attendance_trend(user_id, course_code=None, limit=10):
+    """Get attendance rate per session for last N sessions."""
+    with get_db_connection() as conn:
+        if course_code:
+            sessions = conn.execute(
+                """SELECT cs.id, cs.course_code, cs.start_time,
+                          COUNT(DISTINCT a.student_id) as attended,
+                          (SELECT COUNT(*) FROM students WHERE is_enrolled = 1
+                           AND courses LIKE '%' || cs.course_code || '%') as total
+                   FROM class_sessions cs
+                   LEFT JOIN attendance a ON cs.id = a.session_id
+                   WHERE cs.user_id = ? AND cs.is_active = 0 AND cs.course_code = ?
+                   GROUP BY cs.id
+                   ORDER BY cs.start_time DESC
+                   LIMIT ?""",
+                (user_id, course_code, limit),
+            ).fetchall()
+        else:
+            sessions = conn.execute(
+                """SELECT cs.id, cs.course_code, cs.start_time,
+                          COUNT(DISTINCT a.student_id) as attended,
+                          (SELECT COUNT(*) FROM students WHERE is_enrolled = 1
+                           AND courses LIKE '%' || cs.course_code || '%') as total
+                   FROM class_sessions cs
+                   LEFT JOIN attendance a ON cs.id = a.session_id
+                   WHERE cs.user_id = ? AND cs.is_active = 0
+                   GROUP BY cs.id
+                   ORDER BY cs.start_time DESC
+                   LIMIT ?""",
+                (user_id, limit),
+            ).fetchall()
+
+        result = []
+        for s in sessions:
+            total = s["total"] if s["total"] > 0 else 1
+            rate = round((s["attended"] / total) * 100, 1)
+            result.append(
+                {
+                    "session_id": s["id"],
+                    "course_code": s["course_code"],
+                    "date": s["start_time"],
+                    "attended": s["attended"],
+                    "total": total,
+                    "rate": rate,
+                }
+            )
+        return list(reversed(result))
+
+
+def get_student_leaderboard(course_code=None, limit=50):
+    """Get students ranked by attendance rate."""
+    with get_db_connection() as conn:
+        if course_code:
+            total_sessions = conn.execute(
+                "SELECT COUNT(*) FROM class_sessions WHERE course_code = ? AND is_active = 0",
+                (course_code,),
+            ).fetchone()[0]
+
+            students = conn.execute(
+                """SELECT s.student_id, s.name, s.level,
+                          COUNT(a.id) as attended
+                   FROM students s
+                   LEFT JOIN attendance a ON s.student_id = a.student_id AND a.course_code = ?
+                   WHERE s.is_enrolled = 1 AND s.courses LIKE ?
+                   GROUP BY s.student_id
+                   ORDER BY attended DESC
+                   LIMIT ?""",
+                (course_code, f"%{course_code}%", limit),
+            ).fetchall()
+        else:
+            total_sessions = conn.execute(
+                "SELECT COUNT(*) FROM class_sessions WHERE is_active = 0"
+            ).fetchone()[0]
+
+            students = conn.execute(
+                """SELECT s.student_id, s.name, s.level,
+                          COUNT(a.id) as attended
+                   FROM students s
+                   LEFT JOIN attendance a ON s.student_id = a.student_id
+                   WHERE s.is_enrolled = 1
+                   GROUP BY s.student_id
+                   ORDER BY attended DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+
+        result = []
+        for st in students:
+            rate = (
+                round((st["attended"] / total_sessions) * 100, 1)
+                if total_sessions > 0
+                else 0
+            )
+            result.append(
+                {
+                    "student_id": st["student_id"],
+                    "name": st["name"],
+                    "level": st["level"],
+                    "attended": st["attended"],
+                    "total_sessions": total_sessions,
+                    "rate": rate,
+                }
+            )
+        return result
+
+
+def get_lecturer_courses(user_id):
+    """Get distinct course codes from lecturer's sessions."""
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT course_code FROM class_sessions WHERE user_id = ? ORDER BY course_code",
+            (user_id,),
+        ).fetchall()
+        return [row["course_code"] for row in rows]
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@
     strip: document.getElementById("session-strip"),
     stripInactive: document.getElementById("strip-inactive"),
     stripActive: document.getElementById("strip-active"),
-    sessionCourseSelect: document.getElementById("session-course-select"),
+    sessionCourseSelectContainer: document.getElementById("session-course-select-container"),
     btnStart: document.getElementById("btn-start-session"),
     btnEnd: document.getElementById("btn-end-session"),
     activeCourseCode: document.getElementById("active-course-code"),
@@ -214,21 +214,18 @@
       }
       container.appendChild(pills);
     } else {
-      var select = document.createElement("select");
-      select.className = "input";
-      select.setAttribute("aria-label", "Filter by course");
-      for (var j = 0; j < allCourses.length; j++) {
-        var opt = document.createElement("option");
-        opt.value = j === 0 ? "all" : courses[j - 1];
-        opt.textContent = allCourses[j];
-        if (opt.value === state.selectedCourse) opt.selected = true;
-        select.appendChild(opt);
-      }
-      select.addEventListener("change", function () {
-        state.selectedCourse = this.value;
-        loadHistory();
+      var selectOpts = allCourses.map(function (c, idx) {
+        return { value: idx === 0 ? "all" : courses[idx - 1], label: c };
       });
-      container.appendChild(select);
+      new CustomSelect(container, {
+        options: selectOpts,
+        value: state.selectedCourse,
+        ariaLabel: "Filter by course",
+        onChange: function (val) {
+          state.selectedCourse = val;
+          loadHistory();
+        }
+      });
     }
 
     populateSessionCourseSelect(courses);
@@ -244,16 +241,25 @@
     loadHistory();
   }
 
+  var sessionCourseDropdown = null;
+
   function populateSessionCourseSelect(courses) {
-    var select = dom.sessionCourseSelect;
-    if (!select) return;
-    select.innerHTML = '<option value="">Select course</option>';
+    var container = dom.sessionCourseSelectContainer;
+    if (!container) return;
+    var opts = [{ value: "", label: "Select course" }];
     for (var i = 0; i < courses.length; i++) {
-      var opt = document.createElement("option");
-      opt.value = courses[i];
-      opt.textContent = courses[i];
-      select.appendChild(opt);
+      opts.push({ value: courses[i], label: courses[i] });
     }
+    if (sessionCourseDropdown) {
+      sessionCourseDropdown.destroy();
+    }
+    sessionCourseDropdown = new CustomSelect(container, {
+      options: opts,
+      value: "",
+      placeholder: "Select course",
+      compact: true,
+      ariaLabel: "Select course for session"
+    });
   }
 
   // --- Session UI State ---
@@ -522,7 +528,7 @@
   // --- Session Actions ---
 
   function startSession() {
-    var courseCode = dom.sessionCourseSelect.value;
+    var courseCode = sessionCourseDropdown ? sessionCourseDropdown.getValue() : "";
     if (!courseCode) {
       showToast("Select a course first", "warning");
       return;

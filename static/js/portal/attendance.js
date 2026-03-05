@@ -87,21 +87,19 @@
         });
       });
     } else {
-      var selectHtml = '<div class="att-filter-dropdown">'
-        + '<select class="input" aria-label="Filter by course">';
-      allCourses.forEach(function (course) {
-        var selected = (course === 'All' && !state.activeCourse)
-          || course === state.activeCourse;
-        selectHtml += '<option value="' + escapeHtml(course) + '"'
-          + (selected ? ' selected' : '')
-          + '>' + escapeHtml(course) + '</option>';
+      container.innerHTML = '<div class="att-filter-dropdown" id="att-filter-dropdown-container"></div>';
+      var dropdownContainer = document.getElementById('att-filter-dropdown-container');
+      var selectOpts = allCourses.map(function (course) {
+        return { value: course, label: course };
       });
-      selectHtml += '</select></div>';
-      container.innerHTML = selectHtml;
-
-      container.querySelector('select').addEventListener('change', function () {
-        state.activeCourse = this.value === 'All' ? null : this.value;
-        loadAttendance();
+      new CustomSelect(dropdownContainer, {
+        options: selectOpts,
+        value: state.activeCourse || 'All',
+        ariaLabel: 'Filter by course',
+        onChange: function (val) {
+          state.activeCourse = val === 'All' ? null : val;
+          loadAttendance();
+        }
       });
     }
   }

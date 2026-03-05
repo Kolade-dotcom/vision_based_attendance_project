@@ -135,10 +135,18 @@
 
       @media (min-width: 768px) {
         .portal-content {
-          max-width: 640px;
+          max-width: 860px;
           margin-left: auto;
           margin-right: auto;
+          padding: var(--space-6);
           padding-bottom: var(--space-4);
+        }
+      }
+
+      @media (min-width: 1200px) {
+        .portal-content {
+          max-width: 1040px;
+          padding: var(--space-8) var(--space-6);
         }
       }
 
@@ -274,6 +282,7 @@
     <div class="toast-container" id="toast-container"></div>
 
     <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/components/custom-select.js') }}"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

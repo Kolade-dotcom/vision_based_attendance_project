@@ -5,7 +5,6 @@ Implements KYC-style multi-pose face capture for robust face encoding.
 
 import cv2
 import numpy as np
-import pickle
 import face_recognition
 
 
@@ -416,7 +415,7 @@ class GuidedFaceCapture:
         
         # Average all encodings for robustness
         avg_encoding = np.mean(self.encodings, axis=0)
-        return pickle.dumps(avg_encoding)
+        return avg_encoding.tobytes()
     
     def reset(self):
         """Reset capture state to start fresh."""

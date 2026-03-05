@@ -22,12 +22,40 @@ CREATE TABLE IF NOT EXISTS students (
     level TEXT,         -- e.g. "400"
     courses TEXT,       -- JSON array of course codes e.g. '["MTE411", "MTE412"]'
     face_encoding BLOB,  -- Serialized face encoding data
+    password_hash TEXT,            -- bcrypt hash for portal login
+    is_enrolled INTEGER DEFAULT 0, -- 1 = face capture completed
+    status TEXT DEFAULT 'approved' CHECK(status IN ('pending', 'approved', 'rejected')),
+    enrolled_via_link_id INTEGER,  -- FK to enrollment_links (NULL if enrolled by lecturer directly)
+    created_by INTEGER,            -- FK to users (lecturer who enrolled or approved)
+    rejection_reason TEXT,         -- Reason if status is 'rejected'
     created_at TEXT NOT NULL,
-    updated_at TEXT
+    updated_at TEXT,
+    FOREIGN KEY (enrolled_via_link_id) REFERENCES enrollment_links(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Create index on student_id for faster lookups
 CREATE INDEX IF NOT EXISTS idx_students_student_id ON students(student_id);
+CREATE INDEX IF NOT EXISTS idx_students_status ON students(status);
+
+-- Enrollment Links table (for self-enrollment)
+CREATE TABLE IF NOT EXISTS enrollment_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT UNIQUE NOT NULL,           -- Secure random token (URL-safe)
+    created_by INTEGER NOT NULL,          -- Lecturer user ID
+    course_code TEXT,                     -- Optional: pre-fill course
+    level TEXT,                           -- Optional: pre-fill level
+    description TEXT,                     -- Optional: link description/name
+    max_uses INTEGER DEFAULT NULL,        -- NULL = unlimited
+    current_uses INTEGER DEFAULT 0,
+    expires_at TEXT NOT NULL,             -- ISO timestamp
+    is_active INTEGER DEFAULT 1,          -- 0 = revoked
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrollment_links_token ON enrollment_links(token);
+CREATE INDEX IF NOT EXISTS idx_enrollment_links_created_by ON enrollment_links(created_by);
 
 -- Class Sessions table
 CREATE TABLE IF NOT EXISTS class_sessions (

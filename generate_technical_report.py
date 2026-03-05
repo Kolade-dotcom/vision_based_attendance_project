@@ -3,6 +3,7 @@ Technical Report Generator for Vision-Based Attendance System
 Generates a properly structured DOCX technical report document.
 """
 
+import os
 from docx import Document
 from docx.shared import Pt, Inches, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -11,12 +12,43 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(SCRIPT_DIR, 'assets', 'images')
+
 
 def set_cell_shading(cell, fill_color):
     """Set background color for a table cell."""
     shading_elm = OxmlElement('w:shd')
     shading_elm.set(qn('w:fill'), fill_color)
     cell._tc.get_or_add_tcPr().append(shading_elm)
+
+
+def add_figure(doc, image_path, caption, width=Inches(5.5)):
+    """Add an image with a caption to the document."""
+    if os.path.exists(image_path):
+        # Add the image
+        para = doc.add_paragraph()
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = para.add_run()
+        run.add_picture(image_path, width=width)
+        
+        # Add the caption
+        caption_para = doc.add_paragraph()
+        caption_run = caption_para.add_run(caption)
+        caption_run.italic = True
+        caption_run.font.size = Pt(10)
+        caption_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        doc.add_paragraph()  # Add spacing after figure
+        return True
+    else:
+        # If image doesn't exist, add a placeholder text
+        placeholder = doc.add_paragraph()
+        placeholder.add_run(f"[Image: {caption}]").italic = True
+        placeholder.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph()
+        return False
 
 
 def create_technical_report():
@@ -161,6 +193,68 @@ def create_technical_report():
         p.add_run(entry)
         p.add_run("\t" * 5 + page)
     
+    doc.add_paragraph()
+    doc.add_paragraph()
+    
+    # =========================================================================
+    # LIST OF FIGURES
+    # =========================================================================
+    
+    lof_title = doc.add_paragraph()
+    lof_title_run = lof_title.add_run("LIST OF FIGURES")
+    lof_title_run.bold = True
+    lof_title_run.font.size = Pt(14)
+    lof_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_paragraph()
+    
+    # List of figures entries
+    figures = [
+        ("Figure 3.1: System Architecture Diagram", "10"),
+        ("Figure 3.2: Hardware System Block Diagram", "11"),
+        ("Figure 3.3: WiFi Communication and Data Flow Diagram", "12"),
+        ("Figure 3.4: Circuit Schematic", "13"),
+        ("Figure 3.5: Breadboard Wiring Diagram", "14"),
+        ("Figure 3.6: ESP32 Pin Connections Diagram", "15"),
+        ("Figure 3.7: Face Recognition Pipeline", "16"),
+        ("Figure 3.8: System Methodology Flowchart", "17"),
+        ("Figure 3.9: Entity-Relationship Diagram", "18"),
+    ]
+    
+    for fig, page in figures:
+        p = doc.add_paragraph()
+        p.add_run(fig)
+        p.add_run("\t" * 5 + page)
+    
+    doc.add_paragraph()
+    doc.add_paragraph()
+    
+    # =========================================================================
+    # LIST OF PLATES
+    # =========================================================================
+    
+    lop_title = doc.add_paragraph()
+    lop_title_run = lop_title.add_run("LIST OF PLATES")
+    lop_title_run.bold = True
+    lop_title_run.font.size = Pt(14)
+    lop_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_paragraph()
+    
+    # List of plates entries
+    plates = [
+        ("Plate 1: Attendance Dashboard Interface", "26"),
+        ("Plate 2: Student Enrollment Interface", "26"),
+        ("Plate 3: Hardware Components Breadboard Setup", "27"),
+        ("Plate 4: Final Assembled Device (Enclosure)", "27"),
+        ("Plate 5: Circuit Schematic Reference", "28"),
+    ]
+    
+    for plate, page in plates:
+        p = doc.add_paragraph()
+        p.add_run(plate)
+        p.add_run("\t" * 5 + page)
+    
     doc.add_page_break()
     
     # =========================================================================
@@ -218,13 +312,10 @@ These challenges necessitate the development of an automated, accurate, and effi
     specific_obj.add_run("The specific objectives are:").bold = True
     
     objectives = [
-        "To design and develop a face recognition system capable of accurately identifying enrolled students.",
-        "To implement a real-time video streaming system for continuous face detection and recognition.",
-        "To create a comprehensive database system for storing student information, face encodings, and attendance records.",
-        "To develop a web-based user interface for system administration, student enrollment, and attendance monitoring.",
-        "To implement session management functionality for organizing attendance records by class sessions.",
-        "To integrate hardware components (LEDs, buzzers, and door control) for providing visual and audio feedback.",
-        "To develop analytics and reporting features for attendance data visualization and export."
+        "To design and develop a face recognition system capable of accurately identifying enrolled students using computer vision and deep learning techniques.",
+        "To create an integrated web-based attendance management system with a comprehensive database for storing student information, face encodings, and attendance records.",
+        "To implement session management functionality with real-time monitoring, late arrival detection, and comprehensive reporting capabilities.",
+        "To integrate hardware components (ESP32-CAM, LCD display, and buzzer) for video capture and providing visual and audio feedback."
     ]
     
     for obj in objectives:
@@ -467,6 +558,10 @@ Data Flow:
     
     doc.add_paragraph(design_text)
     
+    # Add System Architecture Diagram
+    arch_img = os.path.join(IMAGES_DIR, 'system_architecture.png')
+    add_figure(doc, arch_img, "Figure 3.1: System Architecture Diagram")
+    
     # 3.2 Hardware Components
     doc.add_heading("3.2 Hardware Components", level=2)
     
@@ -493,15 +588,15 @@ Data Flow:
     
     # BEME items
     beme_items = [
-        ('1', 'ESP32-CAM Module', 'OV2640 2MP Camera, WiFi enabled', '1', '4,500'),
-        ('2', 'ESP32 DevKit', 'ESP32-WROOM-32, WiFi/Bluetooth', '1', '3,500'),
-        ('3', '16x2 LCD with I2C', 'I2C module for simplified wiring', '1', '2,500'),
-        ('4', 'Active Buzzer 5V', 'Provides audio feedback', '1', '300'),
-        ('5', 'Breadboard and Wires', 'Standard prototyping kit', '1 set', '1,500'),
-        ('6', '5V Power Supply', '2A adapter with USB cables', '1', '1,500'),
-        ('7', 'Project Enclosure', 'Plastic box for housing components', '1', '2,000'),
-        ('8', 'Miscellaneous/Contingency', 'Connectors, headers, unforeseen costs', '1', '2,200'),
-        ('', 'Total', '', '', '18,000'),
+        ('1', 'ESP32-CAM Module', 'OV2640 2MP Camera, WiFi enabled', '1', '8,500'),
+        ('2', 'ESP32 DevKit', 'ESP32-WROOM-32, WiFi/Bluetooth', '1', '6,500'),
+        ('3', '16x2 LCD with I2C', 'I2C module for simplified wiring', '1', '4,500'),
+        ('4', 'Active Buzzer 5V', 'Provides audio feedback', '1', '500'),
+        ('5', 'Breadboard and Wires', 'Standard prototyping kit', '1 set', '3,000'),
+        ('6', '5V Power Supply', '2A adapter with USB cables', '1', '2,500'),
+        ('7', 'Project Enclosure', 'ABS plastic box for housing components', '1', '5,000'),
+        ('8', 'Miscellaneous/Contingency', 'Connectors, headers, unforeseen costs', '1', '4,500'),
+        ('', 'Total', '', '', '35,000'),
     ]
     
     for item in beme_items:
@@ -539,6 +634,245 @@ The ESP32 microcontroller serves as an interface between the software applicatio
 The modular wireless design allows flexible placement of the camera unit while maintaining reliable communication with the main system."""
     
     doc.add_paragraph(hardware_detail)
+    
+    # =========================================================================
+    # 3.2.1 Hardware System Block Diagram
+    # =========================================================================
+    
+    doc.add_heading("3.2.1 Hardware System Block Diagram", level=3)
+    
+    block_diagram_text = """The hardware system consists of multiple interconnected components that work together to capture video, process face recognition, and provide feedback. The block diagram below illustrates the high-level connections between all hardware components."""
+    doc.add_paragraph(block_diagram_text)
+    
+    # Add Hardware Block Diagram
+    block_diagram_img = os.path.join(IMAGES_DIR, 'hardware_block_diagram.png')
+    add_figure(doc, block_diagram_img, "Figure 3.2: Hardware System Block Diagram")
+    
+    # =========================================================================
+    # 3.2.2 Wireless Communication Architecture
+    # =========================================================================
+    
+    doc.add_heading("3.2.2 Wireless Communication Architecture", level=3)
+    
+    wifi_comm_text = """The system employs WiFi-based wireless communication to enable flexible deployment and eliminate the need for wired connections between components. All devices connect to a common WiFi router on a local network.
+
+Communication Protocol Stack:
+
+1. ESP32-CAM to Flask Server:
+   - Protocol: HTTP/1.1 over WiFi (802.11 b/g/n)
+   - Video Stream: MJPEG (Motion JPEG) multipart stream on port 81
+   - Snapshot: HTTP GET request to /capture endpoint
+   - Data Format: Binary JPEG frames with multipart boundaries
+   - Frame Rate: 10-15 FPS at VGA resolution (640x480)
+   - Latency: Approximately 100-200ms for real-time video
+
+2. Flask Server to ESP32 DevKit:
+   - Protocol: HTTP/1.1 REST API
+   - Commands: POST requests with JSON payloads
+   - Endpoints:
+     * POST /lcd - Update LCD display message
+     * POST /buzzer/success - Play success tone
+     * POST /buzzer/error - Play error tone
+     * GET /status - Check device status
+   - Response: JSON acknowledgment with status
+
+Network Configuration:
+   - Network Type: 2.4GHz WiFi (better range compatibility)
+   - IP Assignment: Static IP addresses for reliable communication
+   - ESP32-CAM IP: 192.168.1.101 (configurable)
+   - ESP32 DevKit IP: 192.168.1.100 (configurable)
+   - Flask Server: Runs on host PC (port 5000)
+
+Data Flow Sequence:
+   1. ESP32-CAM continuously streams video frames to Flask server
+   2. Flask server performs face detection and recognition
+   3. Upon recognition, Flask sends HTTP command to ESP32 DevKit
+   4. ESP32 DevKit updates LCD display and activates buzzer
+   5. Attendance record is stored in database"""
+    
+    doc.add_paragraph(wifi_comm_text)
+    
+    # Add WiFi Communication Diagram
+    wifi_diagram_img = os.path.join(IMAGES_DIR, 'wifi_communication_diagram.png')
+    add_figure(doc, wifi_diagram_img, "Figure 3.3: WiFi Communication and Data Flow Diagram")
+    
+    # =========================================================================
+    # 3.2.3 Circuit Schematic
+    # =========================================================================
+    
+    doc.add_heading("3.2.3 Circuit Schematic", level=3)
+    
+    schematic_text = """The circuit schematic shows the detailed electrical connections between the ESP32 DevKit and peripheral components. The design uses the ESP32's built-in GPIO pins for control signals and I2C bus for LCD communication.
+
+Key Circuit Design Considerations:
+
+1. Power Supply:
+   - Input: 5V DC via USB cable (2A minimum recommended)
+   - ESP32 internal regulator provides 3.3V for logic
+   - Decoupling capacitor (100µF) stabilizes power supply
+   - All components share common ground rail
+
+2. I2C LCD Connection:
+   - Uses PCF8574 I2C expander on LCD backpack
+   - I2C Address: 0x27 (default, configurable via jumpers)
+   - SDA connected to GPIO21 (ESP32 default I2C data)
+   - SCL connected to GPIO22 (ESP32 default I2C clock)
+   - 4.7kΩ pull-up resistors on both I2C lines
+   - Operating voltage: 5V for LCD, logic level compatible with 3.3V
+
+3. Buzzer Connection:
+   - Active piezo buzzer (built-in oscillator)
+   - Connected to GPIO4 via 100Ω current-limiting resistor
+   - Controlled by digital HIGH/LOW signals
+   - Resonant frequency: 2.3kHz for audible alert
+
+4. Status LED:
+   - Green 5mm LED for visual feedback
+   - Connected to GPIO2 via 220Ω current-limiting resistor
+   - Forward voltage: 2.0-2.2V
+   - Operating current: ~10mA"""
+    
+    doc.add_paragraph(schematic_text)
+    
+    # Add Circuit Schematic
+    schematic_img = os.path.join(IMAGES_DIR, 'circuit_schematic.png')
+    add_figure(doc, schematic_img, "Figure 3.4: ESP32-Based Attendance System Circuit Schematic")
+    
+    # =========================================================================
+    # 3.2.4 Breadboard Wiring
+    # =========================================================================
+    
+    doc.add_heading("3.2.4 Breadboard Wiring Layout", level=3)
+    
+    breadboard_text = """The breadboard wiring diagram provides a practical guide for assembling the hardware prototype. The layout is designed for a standard 830-point solderless breadboard.
+
+Wiring Color Code:
+   - Red wires: +5V power connections
+   - Black wires: Ground (GND) connections
+   - Yellow wire: I2C SDA data line
+   - Orange wire: I2C SCL clock line
+   - Green wire: Buzzer control signal
+   - Blue wire: LED control signal
+
+Assembly Steps:
+
+1. Place ESP32 DevKit:
+   - Position across the center gap of breadboard
+   - Ensure USB port faces outward for programming access
+   - Note pin positions based on board markings
+
+2. Connect Power Rails:
+   - Red jumper from ESP32 VIN to positive rail (+5V)
+   - Black jumper from ESP32 GND to negative rail (GND)
+   - Connect both sides of breadboard power rails
+
+3. Wire I2C LCD Display:
+   - VCC (LCD) → +5V rail (red wire)
+   - GND (LCD) → GND rail (black wire)
+   - SDA (LCD) → GPIO21 (yellow wire)
+   - SCL (LCD) → GPIO22 (orange wire)
+
+4. Connect Active Buzzer:
+   - Positive (+) → GPIO4 via 100Ω resistor (green wire)
+   - Negative (-) → GND rail (black wire)
+
+5. Connect Status LED:
+   - Anode (long leg) → GPIO2 via 220Ω resistor (blue wire)
+   - Cathode (short leg) → GND rail (black wire)"""
+    
+    doc.add_paragraph(breadboard_text)
+    
+    # Add Breadboard Wiring Diagram
+    breadboard_img = os.path.join(IMAGES_DIR, 'breadboard_wiring.png')
+    add_figure(doc, breadboard_img, "Figure 3.5: Breadboard Wiring Layout Diagram")
+    
+    # =========================================================================
+    # 3.2.5 Pin Connection Reference
+    # =========================================================================
+    
+    doc.add_heading("3.2.5 Pin Connection Reference", level=3)
+    
+    pin_intro = """The following table provides a complete reference for all GPIO pin assignments used in the hardware design. The ESP32 DevKit V1 (38-pin variant) is used as the main controller."""
+    doc.add_paragraph(pin_intro)
+    
+    # Create Pin Connection Table
+    pin_table_title = doc.add_paragraph()
+    pin_table_title.add_run("Table 3.4: ESP32 GPIO Pin Assignments").bold = True
+    pin_table_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    pin_table = doc.add_table(rows=1, cols=5)
+    pin_table.style = 'Table Grid'
+    pin_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    
+    # Header row
+    pin_hdr = pin_table.rows[0].cells
+    pin_headers = ['GPIO Pin', 'Pin Number', 'Function', 'Connected To', 'Wire Color']
+    for i, header in enumerate(pin_headers):
+        pin_hdr[i].text = header
+        pin_hdr[i].paragraphs[0].runs[0].bold = True
+        set_cell_shading(pin_hdr[i], 'D9E2F3')
+    
+    # Pin connection data
+    pin_connections = [
+        ('GPIO21', '33', 'I2C SDA', 'LCD Data Pin', 'Yellow'),
+        ('GPIO22', '36', 'I2C SCL', 'LCD Clock Pin', 'Orange'),
+        ('GPIO4', '26', 'Digital Output', 'Active Buzzer (+)', 'Green'),
+        ('GPIO2', '24', 'Digital Output', 'Status LED Anode', 'Blue'),
+        ('VIN', '19', 'Power Input', '+5V Power Rail', 'Red'),
+        ('GND', '38', 'Ground', 'Common Ground Rail', 'Black'),
+    ]
+    
+    for pin_data in pin_connections:
+        row_cells = pin_table.add_row().cells
+        for i, value in enumerate(pin_data):
+            row_cells[i].text = value
+    
+    doc.add_paragraph()
+    
+    # Add Pin Connections Diagram
+    pin_diagram_img = os.path.join(IMAGES_DIR, 'pin_connections_diagram.png')
+    add_figure(doc, pin_diagram_img, "Figure 3.6: ESP32 DevKit Pin Connections Diagram")
+    
+    # =========================================================================
+    # 3.2.6 Enclosure Design
+    # =========================================================================
+    
+    doc.add_heading("3.2.6 Enclosure Design", level=3)
+    
+    enclosure_text = """The final hardware assembly is housed in a custom 3D-printed ABS plastic enclosure designed for durability and user-friendly operation. The enclosure integrates all components into a compact, professional-looking unit.
+
+Enclosure Specifications:
+   - Material: ABS plastic (3D printed)
+   - Color: Black matte finish
+   - Dimensions: Approximately 120mm × 60mm × 45mm
+   - Weight: ~150g (with all components)
+
+Front Panel Features:
+   - Camera lens aperture: 10mm diameter hole for OV2640 lens
+   - LCD display window: Rectangular cutout (72mm × 25mm) for 16x2 LCD
+   - Status LED: 5mm mounting hole with LED diffuser
+   - ESP32 label: Component identification marking
+
+Side/Rear Features:
+   - USB port access: Opening for Micro-USB power cable
+   - Ventilation slots: Passive cooling for ESP32 heat dissipation
+   - Mounting holes: M3 screw holes for wall/desk mounting options
+
+Assembly Notes:
+   - The ESP32-CAM module is mounted at the front for optimal capture angle
+   - LCD display is secured with friction fit or hot glue
+   - Internal wiring is managed with cable ties
+   - The enclosure can be opened for maintenance and updates
+
+The final assembled device provides a clean, integrated appearance suitable for deployment in professional educational environments."""
+    
+    doc.add_paragraph(enclosure_text)
+    
+    # Add Final Assembled Device Photo
+    assembled_img = os.path.join(IMAGES_DIR, 'final_assembled_device.png')
+    add_figure(doc, assembled_img, "Figure 3.7: Final Assembled Hardware Device in Enclosure")
+    
+    doc.add_paragraph()
     
     # 3.3 Software Components
     doc.add_heading("3.3 Software Components", level=2)
@@ -693,6 +1027,14 @@ Key Implementation Details:
     
     doc.add_paragraph(implementation_text)
     
+    # Add Face Recognition Pipeline Diagram
+    pipeline_img = os.path.join(IMAGES_DIR, 'face_recognition_pipeline.png')
+    add_figure(doc, pipeline_img, "Figure 3.8: Face Recognition Pipeline")
+    
+    # Add Methodology Flowchart
+    flowchart_img = os.path.join(IMAGES_DIR, 'methodology_flowchart.png')
+    add_figure(doc, flowchart_img, "Figure 3.9: System Methodology Flowchart")
+    
     # 3.5 Database Design
     doc.add_heading("3.5 Database Design", level=2)
     
@@ -767,6 +1109,10 @@ Key Implementation Details:
 The database design ensures data integrity through foreign key relationships and supports efficient querying with indexed columns."""
     
     doc.add_paragraph(db_er)
+    
+    # Add Database ER Diagram
+    er_img = os.path.join(IMAGES_DIR, 'database_er_diagram.png')
+    add_figure(doc, er_img, "Figure 3.10: Entity-Relationship Diagram")
     
     doc.add_page_break()
     
@@ -1109,8 +1455,38 @@ Network:
     
     doc.add_paragraph(requirements)
     
+    # =========================================================================
+    # APPENDIX C: PLATES (System Screenshots and Hardware)
+    # =========================================================================
+    
+    doc.add_heading("Appendix C: Plates", level=2)
+    
+    plates_intro = doc.add_paragraph()
+    plates_intro.add_run("The following plates show the implemented system interface and hardware components.")
+    doc.add_paragraph()
+    
+    # Plate 1: Dashboard Screenshot
+    dashboard_img = os.path.join(IMAGES_DIR, 'dashboard_screenshot.png')
+    add_figure(doc, dashboard_img, "Plate 1: Attendance Dashboard with Live Camera Feed and Real-time Statistics")
+    
+    # Plate 2: Enrollment Screenshot
+    enrollment_img = os.path.join(IMAGES_DIR, 'enrollment_screenshot.png')
+    add_figure(doc, enrollment_img, "Plate 2: Student Enrollment Interface with Guided Face Capture")
+    
+    # Plate 3: Breadboard Hardware Setup
+    breadboard_plate_img = os.path.join(IMAGES_DIR, 'breadboard_wiring.png')
+    add_figure(doc, breadboard_plate_img, "Plate 3: Hardware Components Breadboard Wiring Setup")
+    
+    # Plate 4: Final Assembled Device
+    final_device_img = os.path.join(IMAGES_DIR, 'final_assembled_device.png')
+    add_figure(doc, final_device_img, "Plate 4: Final Assembled Hardware Device in 3D-Printed Enclosure")
+    
+    # Plate 5: Circuit Schematic Reference
+    schematic_plate_img = os.path.join(IMAGES_DIR, 'circuit_schematic.png')
+    add_figure(doc, schematic_plate_img, "Plate 5: Complete Circuit Schematic Reference")
+    
     # Save document
-    output_path = 'TECHNICAL_REPORT_MTE411.docx'
+    output_path = 'TECHNICAL_REPORT_MTE411_v6.docx'
     doc.save(output_path)
     print(f"Technical report generated: {output_path}")
     return output_path

@@ -161,6 +161,32 @@
     border-radius: var(--radius-sm);
     margin-bottom: var(--space-2);
   }
+
+  /* === Desktop two-column layout ========================================== */
+  @media (min-width: 768px) {
+    .home-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-5);
+    }
+
+    .home-grid__full {
+      grid-column: 1 / -1;
+    }
+
+    .quick-stats {
+      flex-direction: column;
+      gap: var(--space-4);
+      margin-bottom: 0;
+    }
+
+    .quick-stat {
+      background-color: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+    }
+  }
 </style>
 
 <!-- Loading skeleton -->
@@ -177,31 +203,36 @@
 
 <!-- Populated content (hidden until loaded) -->
 <div id="home-content" style="display: none;">
-  <!-- Status Card -->
+  <!-- Status Card (always full width) -->
   <div class="status-card">
     <h2 class="status-card__name" id="student-name"></h2>
     <div class="status-card__matric" id="student-matric"></div>
     <span class="status-card__badge" id="enrollment-badge"></span>
   </div>
 
-  <!-- Today's Attendance (conditionally shown) -->
+  <!-- Today's Attendance (conditionally shown, full width) -->
   <div id="today-section" style="display: none;"></div>
 
-  <!-- Quick Stats -->
-  <div class="quick-stats">
-    <div class="quick-stat">
-      <div class="quick-stat__number" id="stat-rate">—</div>
-      <div class="quick-stat__label">Attendance Rate</div>
+  <!-- Two-column grid on desktop -->
+  <div class="home-grid">
+    <!-- Left: Recent Activity -->
+    <div>
+      <h3 class="recent-heading">Recent</h3>
+      <div id="recent-container"></div>
     </div>
-    <div class="quick-stat">
-      <div class="quick-stat__number" id="stat-courses">—</div>
-      <div class="quick-stat__label">Courses</div>
+
+    <!-- Right: Quick Stats -->
+    <div class="quick-stats">
+      <div class="quick-stat">
+        <div class="quick-stat__number" id="stat-rate">—</div>
+        <div class="quick-stat__label">Attendance Rate</div>
+      </div>
+      <div class="quick-stat">
+        <div class="quick-stat__number" id="stat-courses">—</div>
+        <div class="quick-stat__label">Courses</div>
+      </div>
     </div>
   </div>
-
-  <!-- Recent Activity -->
-  <h3 class="recent-heading">Recent</h3>
-  <div id="recent-container"></div>
 </div>
 {% endblock %}
 
