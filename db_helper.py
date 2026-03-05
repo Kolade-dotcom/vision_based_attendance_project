@@ -1,6 +1,7 @@
 """
 Database Helper Module
-Handles all SQLite database operations for the attendance system.
+Handles all database operations for the attendance system.
+Supports PostgreSQL (via DATABASE_URL env var) and SQLite (fallback).
 """
 
 import sqlite3
@@ -19,8 +20,16 @@ try:
 except ImportError:
     config = None
 
+# PostgreSQL support: if DATABASE_URL is set, use PostgreSQL; otherwise SQLite
+DATABASE_URL = os.environ.get("DATABASE_URL")
+_USE_POSTGRES = DATABASE_URL is not None
 
-# Database file path (can be overridden for deployment/testing)
+if _USE_POSTGRES:
+    import psycopg2
+    import psycopg2.extras
+
+
+# Database file path (can be overridden for deployment/testing) — SQLite only
 _DEFAULT_DATABASE_PATH = os.path.join(os.path.dirname(__file__), "database", "attendance.db")
 
 if os.environ.get("DATABASE_PATH"):
@@ -40,19 +49,48 @@ def set_database_path(path):
     _DATABASE_PATH = path
 
 
+def _q(sql):
+    """Convert ? placeholders to %s for PostgreSQL."""
+    if _USE_POSTGRES:
+        return sql.replace("?", "%s")
+    return sql
+
+
 @contextmanager
 def get_db_connection():
     """Context manager for database connection."""
-    conn = sqlite3.connect(_DATABASE_PATH)
-    conn.row_factory = sqlite3.Row  # Access columns by name
-    try:
-        yield conn
-    finally:
-        conn.close()
+    if _USE_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            yield conn
+        finally:
+            conn.close()
+    else:
+        conn = sqlite3.connect(_DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
-def init_database():
-    """Initialize the database with schema and run migrations."""
+def _init_postgres():
+    """Initialize PostgreSQL database with schema."""
+    schema_path = os.path.join(os.path.dirname(__file__), "database", "schema_postgres.sql")
+
+    with open(schema_path, "r") as f:
+        schema = f.read()
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(schema)
+        conn.commit()
+
+    logger.info("PostgreSQL database initialized successfully!")
+
+
+def _init_sqlite():
+    """Initialize SQLite database with schema and run migrations."""
     schema_path = os.path.join(os.path.dirname(__file__), "database", "schema.sql")
 
     with open(schema_path, "r") as f:
@@ -72,7 +110,6 @@ def init_database():
             cursor.execute("PRAGMA table_info(class_sessions)")
             columns = [info[1] for info in cursor.fetchall()]
             if "user_id" not in columns:
-                # Add column with default value for existing records
                 conn.execute(
                     "ALTER TABLE class_sessions ADD COLUMN user_id INTEGER DEFAULT 1"
                 )
@@ -133,7 +170,15 @@ def init_database():
         conn.executescript(schema)
         conn.commit()
 
-    logger.info("Database initialized successfully!")
+    logger.info("SQLite database initialized successfully!")
+
+
+def init_database():
+    """Initialize the database with schema and run migrations."""
+    if _USE_POSTGRES:
+        _init_postgres()
+    else:
+        _init_sqlite()
 
 
 def create_session(course_code, user_id):
@@ -152,19 +197,31 @@ def create_session(course_code, user_id):
 
         # End any existing active sessions for this user
         cursor.execute(
-            "UPDATE class_sessions SET is_active = 0, end_time = ? WHERE user_id = ? AND is_active = 1",
+            _q("UPDATE class_sessions SET is_active = 0, end_time = ? WHERE user_id = ? AND is_active = 1"),
             (start_time, user_id),
         )
 
-        cursor.execute(
-            """
-            INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active)
-            VALUES (?, ?, ?, ?, 1)
-            """,
-            (user_id, course_code, start_time, start_time),
-        )
-        conn.commit()
-        return cursor.lastrowid
+        if _USE_POSTGRES:
+            cursor.execute(
+                _q("""
+                INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active)
+                VALUES (?, ?, ?, ?, 1) RETURNING id
+                """),
+                (user_id, course_code, start_time, start_time),
+            )
+            new_id = cursor.fetchone()["id"]
+            conn.commit()
+        else:
+            cursor.execute(
+                """
+                INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active)
+                VALUES (?, ?, ?, ?, 1)
+                """,
+                (user_id, course_code, start_time, start_time),
+            )
+            conn.commit()
+            new_id = cursor.lastrowid
+        return new_id
 
 
 def end_session(session_id):
@@ -173,7 +230,7 @@ def end_session(session_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE class_sessions SET is_active = 0, end_time = ? WHERE id = ?",
+            _q("UPDATE class_sessions SET is_active = 0, end_time = ? WHERE id = ?"),
             (end_time, session_id),
         )
         conn.commit()
@@ -185,9 +242,9 @@ def delete_session(session_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         # Delete attendance records for this session first
-        cursor.execute("DELETE FROM attendance WHERE session_id = ?", (session_id,))
+        cursor.execute(_q("DELETE FROM attendance WHERE session_id = ?"), (session_id,))
         # Delete the session
-        cursor.execute("DELETE FROM class_sessions WHERE id = ?", (session_id,))
+        cursor.execute(_q("DELETE FROM class_sessions WHERE id = ?"), (session_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -205,7 +262,7 @@ def get_active_session(user_id, course_code=None):
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(query, params)
+        cursor.execute(_q(query), params)
         row = cursor.fetchone()
         if row:
             return dict(row)
@@ -217,21 +274,34 @@ def create_user(email, password_hash, name):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute(
-                "INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)",
-                (email, password_hash, name),
-            )
-            conn.commit()
-            return cursor.lastrowid
-        except sqlite3.IntegrityError:
-            return None
+            if _USE_POSTGRES:
+                cursor.execute(
+                    _q("INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?) RETURNING id"),
+                    (email, password_hash, name),
+                )
+                new_id = cursor.fetchone()["id"]
+                conn.commit()
+                return new_id
+            else:
+                cursor.execute(
+                    "INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)",
+                    (email, password_hash, name),
+                )
+                conn.commit()
+                return cursor.lastrowid
+        except (sqlite3.IntegrityError, Exception) as e:
+            if _USE_POSTGRES:
+                conn.rollback()
+            if "UNIQUE" in str(e).upper() or "unique" in str(e).lower() or isinstance(e, sqlite3.IntegrityError):
+                return None
+            raise
 
 
 def get_user_by_email(email):
     """Get user by email."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+        cursor.execute(_q("SELECT * FROM users WHERE email = ?"), (email,))
         row = cursor.fetchone()
         if row:
             return dict(row)
@@ -241,9 +311,10 @@ def get_user_by_email(email):
 def get_user_settings(user_id):
     """Get user settings including courses and system settings."""
     with get_db_connection() as conn:
-        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        cursor = conn.cursor()
+        user = cursor.execute(_q("SELECT * FROM users WHERE id = ?"), (user_id,)).fetchone()
         settings = {}
-        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        rows = cursor.execute("SELECT key, value FROM settings").fetchall()
         for row in rows:
             settings[row["key"]] = row["value"]
 
@@ -263,20 +334,29 @@ def get_user_settings(user_id):
 def update_user_settings(user_id, data):
     """Update user settings."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        if _USE_POSTGRES:
+            upsert_sql = _q(
+                "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at"
+            )
+        else:
+            upsert_sql = "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)"
         if "late_threshold_minutes" in data:
-            conn.execute(
-                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-                ("late_threshold_minutes", str(data["late_threshold_minutes"])),
+            cursor.execute(
+                upsert_sql,
+                ("late_threshold_minutes", str(data["late_threshold_minutes"]), now),
             )
         if "camera_source" in data:
-            conn.execute(
-                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-                ("camera_source", data["camera_source"]),
+            cursor.execute(
+                upsert_sql,
+                ("camera_source", data["camera_source"], now),
             )
         if "esp32_ip" in data:
-            conn.execute(
-                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-                ("esp32_ip", data["esp32_ip"]),
+            cursor.execute(
+                upsert_sql,
+                ("esp32_ip", data["esp32_ip"], now),
             )
         if "courses" in data:
             courses_json = (
@@ -284,8 +364,8 @@ def update_user_settings(user_id, data):
                 if isinstance(data["courses"], list)
                 else data["courses"]
             )
-            conn.execute(
-                "UPDATE users SET courses = ? WHERE id = ?", (courses_json, user_id)
+            cursor.execute(
+                _q("UPDATE users SET courses = ? WHERE id = ?"), (courses_json, user_id)
             )
         conn.commit()
 
@@ -293,18 +373,20 @@ def update_user_settings(user_id, data):
 def update_user_account(user_id, name=None, email=None):
     """Update user account info."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         if name:
-            conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+            cursor.execute(_q("UPDATE users SET name = ? WHERE id = ?"), (name, user_id))
         if email:
-            conn.execute("UPDATE users SET email = ? WHERE id = ?", (email, user_id))
+            cursor.execute(_q("UPDATE users SET email = ? WHERE id = ?"), (email, user_id))
         conn.commit()
 
 
 def update_user_password(user_id, password_hash):
     """Update user password."""
     with get_db_connection() as conn:
-        conn.execute(
-            "UPDATE users SET password_hash = ? WHERE id = ?",
+        cursor = conn.cursor()
+        cursor.execute(
+            _q("UPDATE users SET password_hash = ? WHERE id = ?"),
             (password_hash, user_id),
         )
         conn.commit()
@@ -332,55 +414,61 @@ def update_student(current_student_id, new_student_id, name, level=None, courses
         # If ID is changing, we need to ensure new ID doesn't exist
         if current_student_id != new_student_id:
             cursor.execute(
-                "SELECT 1 FROM students WHERE student_id = ?", (new_student_id,)
+                _q("SELECT 1 FROM students WHERE student_id = ?"), (new_student_id,)
             )
             if cursor.fetchone():
                 return False  # New ID already exists
 
-            # Strategy:
-            # 1. Update the student record (We need to disable FK constraints temporarily or use valid approaches)
-            # Since SQLite FK support for ON UPDATE CASCADE is not enabled in our schema,
-            # and disabling FKs is risky, we will use the Clone-Move-Delete approach or try direct update if constraints allow (they usually don't if children exist).
-
-            # Actually, standard way if PRAGMA foreign_keys = ON:
-            # You cannot update the parent key if children exist.
-            # We must:
-            # 1. Turn off FKs
-            # 2. Update Student
-            # 3. Update Attendance
-            # 4. Turn on FKs
-
-            try:
-                cursor.execute("PRAGMA foreign_keys=OFF")
-
+            if _USE_POSTGRES:
                 cursor.execute(
-                    """
-                    UPDATE students 
+                    _q("""
+                    UPDATE students
                     SET student_id = ?, name = ?, level = ?, courses = ?
                     WHERE student_id = ?
-                    """,
+                    """),
                     (new_student_id, name, level, courses_json, current_student_id),
                 )
 
                 if cursor.rowcount > 0:
                     cursor.execute(
-                        "UPDATE attendance SET student_id = ? WHERE student_id = ?",
+                        _q("UPDATE attendance SET student_id = ? WHERE student_id = ?"),
                         (new_student_id, current_student_id),
                     )
                     conn.commit()
                     return True
                 return False
-            finally:
-                cursor.execute("PRAGMA foreign_keys=ON")
+            else:
+                try:
+                    cursor.execute("PRAGMA foreign_keys=OFF")
+
+                    cursor.execute(
+                        """
+                        UPDATE students
+                        SET student_id = ?, name = ?, level = ?, courses = ?
+                        WHERE student_id = ?
+                        """,
+                        (new_student_id, name, level, courses_json, current_student_id),
+                    )
+
+                    if cursor.rowcount > 0:
+                        cursor.execute(
+                            "UPDATE attendance SET student_id = ? WHERE student_id = ?",
+                            (new_student_id, current_student_id),
+                        )
+                        conn.commit()
+                        return True
+                    return False
+                finally:
+                    cursor.execute("PRAGMA foreign_keys=ON")
 
         else:
             # Simple update (ID not changing)
             cursor.execute(
-                """
-                UPDATE students 
+                _q("""
+                UPDATE students
                 SET name = ?, level = ?, courses = ?
                 WHERE student_id = ?
-                """,
+                """),
                 (name, level, courses_json, current_student_id),
             )
             conn.commit()
@@ -396,9 +484,8 @@ def delete_student(student_id):
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # With ON DELETE CASCADE in schema, this might suffice, but explicit is safer
-        cursor.execute("DELETE FROM attendance WHERE student_id = ?", (student_id,))
-        cursor.execute("DELETE FROM students WHERE student_id = ?", (student_id,))
+        cursor.execute(_q("DELETE FROM attendance WHERE student_id = ?"), (student_id,))
+        cursor.execute(_q("DELETE FROM students WHERE student_id = ?"), (student_id,))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -437,37 +524,65 @@ def add_student(
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute(
-                """
-                INSERT INTO students (student_id, name, email, level, courses, face_encoding, 
-                                      status, created_by, enrolled_via_link_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    student_id,
-                    name,
-                    email,
-                    level,
-                    courses_json,
-                    face_encoding,
-                    status,
-                    created_by,
-                    enrolled_via_link_id,
-                    datetime.now().isoformat(),
-                ),
-            )
-            conn.commit()
-            return cursor.lastrowid
-        except sqlite3.IntegrityError:
-            logger.error(f"Student ID {student_id} already exists.")
-            return None
+            if _USE_POSTGRES:
+                cursor.execute(
+                    _q("""
+                    INSERT INTO students (student_id, name, email, level, courses, face_encoding,
+                                          status, created_by, enrolled_via_link_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+                    """),
+                    (
+                        student_id,
+                        name,
+                        email,
+                        level,
+                        courses_json,
+                        face_encoding,
+                        status,
+                        created_by,
+                        enrolled_via_link_id,
+                        datetime.now().isoformat(),
+                    ),
+                )
+                new_id = cursor.fetchone()["id"]
+                conn.commit()
+                return new_id
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO students (student_id, name, email, level, courses, face_encoding,
+                                          status, created_by, enrolled_via_link_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        student_id,
+                        name,
+                        email,
+                        level,
+                        courses_json,
+                        face_encoding,
+                        status,
+                        created_by,
+                        enrolled_via_link_id,
+                        datetime.now().isoformat(),
+                    ),
+                )
+                conn.commit()
+                return cursor.lastrowid
+        except (sqlite3.IntegrityError, Exception) as e:
+            if _USE_POSTGRES:
+                conn.rollback()
+            if "UNIQUE" in str(e).upper() or "unique" in str(e).lower() or isinstance(e, sqlite3.IntegrityError):
+                logger.error(f"Student ID {student_id} already exists.")
+                return None
+            raise
 
 
 def get_student(student_id):
     """Get student details by ID."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM students WHERE student_id = ?", (student_id,))
+        cursor.execute(_q("SELECT * FROM students WHERE student_id = ?"), (student_id,))
         row = cursor.fetchone()
         if row:
             return dict(row)
@@ -491,7 +606,7 @@ def get_all_students(status_filter=None):
             params.append(status_filter)
 
         query += " ORDER BY created_at DESC"
-        cursor.execute(query, params)
+        cursor.execute(_q(query), params)
         return [dict(row) for row in cursor.fetchall()]
 
 
@@ -509,7 +624,14 @@ def get_all_student_encodings():
             "SELECT student_id, name, face_encoding FROM students "
             "WHERE face_encoding IS NOT NULL AND status = 'approved'"
         )
-        return [dict(row) for row in cursor.fetchall()]
+        results = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            encoding_data = d["face_encoding"]
+            if isinstance(encoding_data, memoryview):
+                d["face_encoding"] = bytes(encoding_data)
+            results.append(d)
+        return results
 
 
 def record_attendance(student_id, status="present", course_code=None, level=None):
@@ -538,7 +660,7 @@ def record_attendance(student_id, status="present", course_code=None, level=None
             active_params.append(course_code)
 
         cursor.execute(
-            active_session_query + " ORDER BY start_time DESC LIMIT 1", active_params
+            _q(active_session_query + " ORDER BY start_time DESC LIMIT 1"), active_params
         )
         session_row = cursor.fetchone()
         if session_row:
@@ -560,7 +682,7 @@ def record_attendance(student_id, status="present", course_code=None, level=None
 
         # Check if student exists and get their enrolled courses
         cursor.execute(
-            "SELECT id, name, level, courses FROM students WHERE student_id = ?",
+            _q("SELECT id, name, level, courses FROM students WHERE student_id = ?"),
             (student_id,),
         )
         student = cursor.fetchone()
@@ -595,7 +717,7 @@ def record_attendance(student_id, status="present", course_code=None, level=None
         # Check for existing attendance in this session to prevent duplicates
         if session_id:
             cursor.execute(
-                "SELECT 1 FROM attendance WHERE session_id = ? AND student_id = ?",
+                _q("SELECT 1 FROM attendance WHERE session_id = ? AND student_id = ?"),
                 (session_id, student_id),
             )
             if cursor.fetchone():
@@ -610,25 +732,44 @@ def record_attendance(student_id, status="present", course_code=None, level=None
             # Current logic records it with session_id=None if not found.
             pass
 
-        cursor.execute(
-            """
-            INSERT INTO attendance (student_id, timestamp, status, course_code, level, session_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                student_id,
-                datetime.now().isoformat(),
-                status,
-                course_code,
-                level,
-                session_id,
-            ),
-        )
-        conn.commit()
+        if _USE_POSTGRES:
+            cursor.execute(
+                _q("""
+                INSERT INTO attendance (student_id, timestamp, status, course_code, level, session_id)
+                VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+                """),
+                (
+                    student_id,
+                    datetime.now().isoformat(),
+                    status,
+                    course_code,
+                    level,
+                    session_id,
+                ),
+            )
+            new_id = cursor.fetchone()["id"]
+            conn.commit()
+        else:
+            cursor.execute(
+                """
+                INSERT INTO attendance (student_id, timestamp, status, course_code, level, session_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    student_id,
+                    datetime.now().isoformat(),
+                    status,
+                    course_code,
+                    level,
+                    session_id,
+                ),
+            )
+            conn.commit()
+            new_id = cursor.lastrowid
         logger.debug(
             f"Successfully inserted attendance for {student_id} in session {session_id}"
         )
-        return {"id": cursor.lastrowid, "status": status, "student_id": student_id}
+        return {"id": new_id, "status": status, "student_id": student_id}
 
 
 def get_attendance_today(course_code=None, level=None):
@@ -657,7 +798,7 @@ def get_attendance_today(course_code=None, level=None):
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(query, params)
+        cursor.execute(_q(query), params)
         return [dict(row) for row in cursor.fetchall()]
 
 
@@ -684,28 +825,28 @@ def get_statistics(course_code=None, level=None):
 
         # Total present
         cursor.execute(
-            f"SELECT COUNT(*) FROM attendance {where_clause} AND status = 'present'",
+            _q(f"SELECT COUNT(*) as cnt FROM attendance {where_clause} AND status = 'present'"),
             params,
         )
-        present_count = cursor.fetchone()[0]
+        present_count = cursor.fetchone()["cnt"]
 
         # Total late
         cursor.execute(
-            f"SELECT COUNT(*) FROM attendance {where_clause} AND status = 'late'",
+            _q(f"SELECT COUNT(*) as cnt FROM attendance {where_clause} AND status = 'late'"),
             params,
         )
-        late_count = cursor.fetchone()[0]
+        late_count = cursor.fetchone()["cnt"]
 
         # Total students (filtered by level if provided, otherwise all)
-        student_query = "SELECT COUNT(*) FROM students"
+        student_query = "SELECT COUNT(*) as cnt FROM students"
         student_params = []
 
         if level:
             student_query += " WHERE level = ?"
             student_params.append(level)
 
-        cursor.execute(student_query, student_params)
-        total_students = cursor.fetchone()[0]
+        cursor.execute(_q(student_query), student_params)
+        total_students = cursor.fetchone()["cnt"]
 
         return {
             "present_today": present_count,
@@ -727,12 +868,12 @@ def get_session_history(user_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
+            _q("""
             SELECT id, course_code, scheduled_start, start_time, end_time, is_active
             FROM class_sessions
             WHERE is_active = 0 AND user_id = ?
             ORDER BY start_time DESC
-            """,
+            """),
             (user_id,),
         )
         return [dict(row) for row in cursor.fetchall()]
@@ -751,13 +892,13 @@ def get_session_attendance(session_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
+            _q("""
             SELECT a.student_id, s.name as student_name, a.timestamp, a.status, a.course_code
             FROM attendance a
             JOIN students s ON a.student_id = s.student_id
             WHERE a.session_id = ?
             ORDER BY a.timestamp DESC
-            """,
+            """),
             (session_id,),
         )
         return [dict(row) for row in cursor.fetchall()]
@@ -812,17 +953,30 @@ def create_enrollment_link(
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO enrollment_links 
-            (token, created_by, course_code, level, description, max_uses, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (token, user_id, course_code, level, description, max_uses, expires_at),
-        )
-        conn.commit()
+        if _USE_POSTGRES:
+            cursor.execute(
+                _q("""
+                INSERT INTO enrollment_links
+                (token, created_by, course_code, level, description, max_uses, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
+                """),
+                (token, user_id, course_code, level, description, max_uses, expires_at),
+            )
+            new_id = cursor.fetchone()["id"]
+            conn.commit()
+        else:
+            cursor.execute(
+                """
+                INSERT INTO enrollment_links
+                (token, created_by, course_code, level, description, max_uses, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (token, user_id, course_code, level, description, max_uses, expires_at),
+            )
+            conn.commit()
+            new_id = cursor.lastrowid
         return {
-            "id": cursor.lastrowid,
+            "id": new_id,
             "token": token,
             "course_code": course_code,
             "level": level,
@@ -846,12 +1000,12 @@ def validate_enrollment_link(token):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
+            _q("""
             SELECT id, token, created_by, course_code, level, description,
                    max_uses, current_uses, expires_at, is_active
             FROM enrollment_links
             WHERE token = ?
-            """,
+            """),
             (token,),
         )
         row = cursor.fetchone()
@@ -890,7 +1044,7 @@ def increment_link_usage(token):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE enrollment_links SET current_uses = current_uses + 1 WHERE token = ?",
+            _q("UPDATE enrollment_links SET current_uses = current_uses + 1 WHERE token = ?"),
             (token,),
         )
         conn.commit()
@@ -910,13 +1064,13 @@ def get_user_enrollment_links(user_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
-            SELECT id, token, course_code, level, description, max_uses, 
+            _q("""
+            SELECT id, token, course_code, level, description, max_uses,
                    current_uses, expires_at, is_active, created_at
             FROM enrollment_links
             WHERE created_by = ?
             ORDER BY created_at DESC
-            """,
+            """),
             (user_id,),
         )
         return [dict(row) for row in cursor.fetchall()]
@@ -936,7 +1090,7 @@ def revoke_enrollment_link(link_id, user_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE enrollment_links SET is_active = 0 WHERE id = ? AND created_by = ?",
+            _q("UPDATE enrollment_links SET is_active = 0 WHERE id = ? AND created_by = ?"),
             (link_id, user_id),
         )
         conn.commit()
@@ -957,7 +1111,7 @@ def delete_enrollment_link(link_id, user_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM enrollment_links WHERE id = ? AND created_by = ?",
+            _q("DELETE FROM enrollment_links WHERE id = ? AND created_by = ?"),
             (link_id, user_id),
         )
         conn.commit()
@@ -983,11 +1137,11 @@ def approve_student(student_id, user_id):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
-            UPDATE students 
+            _q("""
+            UPDATE students
             SET status = 'approved', created_by = ?, updated_at = ?
             WHERE student_id = ? AND status = 'pending'
-            """,
+            """),
             (user_id, datetime.now().isoformat(), student_id),
         )
         conn.commit()
@@ -1009,11 +1163,11 @@ def reject_student(student_id, user_id, reason=None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
-            UPDATE students 
+            _q("""
+            UPDATE students
             SET status = 'rejected', created_by = ?, rejection_reason = ?, updated_at = ?
             WHERE student_id = ? AND status = 'pending'
-            """,
+            """),
             (user_id, reason, datetime.now().isoformat(), student_id),
         )
         conn.commit()
@@ -1029,8 +1183,8 @@ def get_pending_students_count():
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM students WHERE status = 'pending'")
-        return cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) as cnt FROM students WHERE status = 'pending'")
+        return cursor.fetchone()["cnt"]
 
 
 # ============================================================================
@@ -1041,8 +1195,9 @@ def get_pending_students_count():
 def get_student_by_matric(matric_number):
     """Get student by matric number (student_id)."""
     with get_db_connection() as conn:
-        student = conn.execute(
-            "SELECT * FROM students WHERE student_id = ?", (matric_number,)
+        cursor = conn.cursor()
+        student = cursor.execute(
+            _q("SELECT * FROM students WHERE student_id = ?"), (matric_number,)
         ).fetchone()
         return dict(student) if student else None
 
@@ -1050,24 +1205,36 @@ def get_student_by_matric(matric_number):
 def create_student_account(matric_number, name, email, password_hash):
     """Create a student account (no face encoding yet)."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         now = datetime.now().isoformat()
-        cursor = conn.execute(
-            """INSERT INTO students (student_id, name, email, password_hash, status, is_enrolled, created_at)
-               VALUES (?, ?, ?, ?, 'approved', 0, ?)""",
-            (matric_number, name, email, password_hash, now),
-        )
-        conn.commit()
-        return cursor.lastrowid
+        if _USE_POSTGRES:
+            cursor.execute(
+                _q("""INSERT INTO students (student_id, name, email, password_hash, status, is_enrolled, created_at)
+                   VALUES (?, ?, ?, ?, 'approved', 0, ?) RETURNING id"""),
+                (matric_number, name, email, password_hash, now),
+            )
+            new_id = cursor.fetchone()["id"]
+            conn.commit()
+            return new_id
+        else:
+            cursor.execute(
+                """INSERT INTO students (student_id, name, email, password_hash, status, is_enrolled, created_at)
+                   VALUES (?, ?, ?, ?, 'approved', 0, ?)""",
+                (matric_number, name, email, password_hash, now),
+            )
+            conn.commit()
+            return cursor.lastrowid
 
 
 def update_student_enrollment(student_id, face_encoding, level, courses):
     """Mark student as enrolled with face encoding and academic details."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         courses_json = json.dumps(courses) if isinstance(courses, list) else courses
-        conn.execute(
-            """UPDATE students
+        cursor.execute(
+            _q("""UPDATE students
                SET face_encoding = ?, level = ?, courses = ?, is_enrolled = 1, updated_at = ?
-               WHERE student_id = ?""",
+               WHERE student_id = ?"""),
             (face_encoding, level, courses_json, datetime.now().isoformat(), student_id),
         )
         conn.commit()
@@ -1076,22 +1243,23 @@ def update_student_enrollment(student_id, face_encoding, level, courses):
 def get_student_attendance(student_id, course_code=None):
     """Get attendance records for a student, optionally filtered by course."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         if course_code:
-            rows = conn.execute(
-                """SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
+            rows = cursor.execute(
+                _q("""SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
                    FROM attendance a
                    JOIN class_sessions cs ON a.session_id = cs.id
                    WHERE a.student_id = ? AND a.course_code = ?
-                   ORDER BY a.timestamp DESC""",
+                   ORDER BY a.timestamp DESC"""),
                 (student_id, course_code),
             ).fetchall()
         else:
-            rows = conn.execute(
-                """SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
+            rows = cursor.execute(
+                _q("""SELECT a.*, cs.course_code as session_course, cs.start_time as session_start
                    FROM attendance a
                    JOIN class_sessions cs ON a.session_id = cs.id
                    WHERE a.student_id = ?
-                   ORDER BY a.timestamp DESC""",
+                   ORDER BY a.timestamp DESC"""),
                 (student_id,),
             ).fetchall()
         return [dict(row) for row in rows]
@@ -1100,34 +1268,35 @@ def get_student_attendance(student_id, course_code=None):
 def get_student_attendance_stats(student_id, course_code=None):
     """Get attendance stats for a student."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         if course_code:
-            total = conn.execute(
-                """SELECT COUNT(DISTINCT cs.id) FROM class_sessions cs
-                   WHERE cs.course_code = ? AND cs.is_active = 0""",
+            total = cursor.execute(
+                _q("""SELECT COUNT(DISTINCT cs.id) as cnt FROM class_sessions cs
+                   WHERE cs.course_code = ? AND cs.is_active = 0"""),
                 (course_code,),
-            ).fetchone()[0]
-            present = conn.execute(
-                """SELECT COUNT(*) FROM attendance
-                   WHERE student_id = ? AND course_code = ? AND status = 'present'""",
+            ).fetchone()["cnt"]
+            present = cursor.execute(
+                _q("""SELECT COUNT(*) as cnt FROM attendance
+                   WHERE student_id = ? AND course_code = ? AND status = 'present'"""),
                 (student_id, course_code),
-            ).fetchone()[0]
-            late = conn.execute(
-                """SELECT COUNT(*) FROM attendance
-                   WHERE student_id = ? AND course_code = ? AND status = 'late'""",
+            ).fetchone()["cnt"]
+            late = cursor.execute(
+                _q("""SELECT COUNT(*) as cnt FROM attendance
+                   WHERE student_id = ? AND course_code = ? AND status = 'late'"""),
                 (student_id, course_code),
-            ).fetchone()[0]
+            ).fetchone()["cnt"]
         else:
-            total = conn.execute(
-                "SELECT COUNT(*) FROM class_sessions WHERE is_active = 0"
-            ).fetchone()[0]
-            present = conn.execute(
-                "SELECT COUNT(*) FROM attendance WHERE student_id = ? AND status = 'present'",
+            total = cursor.execute(
+                "SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0"
+            ).fetchone()["cnt"]
+            present = cursor.execute(
+                _q("SELECT COUNT(*) as cnt FROM attendance WHERE student_id = ? AND status = 'present'"),
                 (student_id,),
-            ).fetchone()[0]
-            late = conn.execute(
-                "SELECT COUNT(*) FROM attendance WHERE student_id = ? AND status = 'late'",
+            ).fetchone()["cnt"]
+            late = cursor.execute(
+                _q("SELECT COUNT(*) as cnt FROM attendance WHERE student_id = ? AND status = 'late'"),
                 (student_id,),
-            ).fetchone()[0]
+            ).fetchone()["cnt"]
 
         attended = present + late
         rate = round((attended / total) * 100, 1) if total > 0 else 0
@@ -1143,6 +1312,7 @@ def get_student_attendance_stats(student_id, course_code=None):
 def update_student_profile(student_id, name=None, email=None, level=None, courses=None):
     """Update student profile fields."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         updates = []
         params = []
         if name is not None:
@@ -1165,8 +1335,8 @@ def update_student_profile(student_id, name=None, email=None, level=None, course
         params.append(datetime.now().isoformat())
         params.append(student_id)
 
-        conn.execute(
-            f"UPDATE students SET {', '.join(updates)} WHERE student_id = ?",
+        cursor.execute(
+            _q(f"UPDATE students SET {', '.join(updates)} WHERE student_id = ?"),
             params,
         )
         conn.commit()
@@ -1176,8 +1346,9 @@ def update_student_profile(student_id, name=None, email=None, level=None, course
 def update_student_face(student_id, face_encoding):
     """Update student face encoding (re-capture)."""
     with get_db_connection() as conn:
-        conn.execute(
-            "UPDATE students SET face_encoding = ?, updated_at = ? WHERE student_id = ?",
+        cursor = conn.cursor()
+        cursor.execute(
+            _q("UPDATE students SET face_encoding = ?, updated_at = ? WHERE student_id = ?"),
             (face_encoding, datetime.now().isoformat(), student_id),
         )
         conn.commit()
@@ -1186,8 +1357,9 @@ def update_student_face(student_id, face_encoding):
 def update_student_password(student_id, password_hash):
     """Update student password."""
     with get_db_connection() as conn:
-        conn.execute(
-            "UPDATE students SET password_hash = ?, updated_at = ? WHERE student_id = ?",
+        cursor = conn.cursor()
+        cursor.execute(
+            _q("UPDATE students SET password_hash = ?, updated_at = ? WHERE student_id = ?"),
             (password_hash, datetime.now().isoformat(), student_id),
         )
         conn.commit()
@@ -1196,8 +1368,9 @@ def update_student_password(student_id, password_hash):
 def get_active_session_by_course(course_code):
     """Get active session for a specific course (any lecturer)."""
     with get_db_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM class_sessions WHERE course_code = ? AND is_active = 1",
+        cursor = conn.cursor()
+        row = cursor.execute(
+            _q("SELECT * FROM class_sessions WHERE course_code = ? AND is_active = 1"),
             (course_code,),
         ).fetchone()
         return dict(row) if row else None
@@ -1206,8 +1379,9 @@ def get_active_session_by_course(course_code):
 def get_student_session_attendance(student_id, session_id):
     """Get a student's attendance record for a specific session."""
     with get_db_connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM attendance WHERE student_id = ? AND session_id = ?",
+        cursor = conn.cursor()
+        row = cursor.execute(
+            _q("SELECT * FROM attendance WHERE student_id = ? AND session_id = ?"),
             (student_id, session_id),
         ).fetchone()
         return dict(row) if row else None
@@ -1221,32 +1395,33 @@ def get_student_session_attendance(student_id, session_id):
 def get_attendance_trend(user_id, course_code=None, limit=10):
     """Get attendance rate per session for last N sessions."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         if course_code:
-            sessions = conn.execute(
-                """SELECT cs.id, cs.course_code, cs.start_time,
+            sessions = cursor.execute(
+                _q("""SELECT cs.id, cs.course_code, cs.start_time,
                           COUNT(DISTINCT a.student_id) as attended,
                           (SELECT COUNT(*) FROM students WHERE is_enrolled = 1
                            AND courses LIKE '%' || cs.course_code || '%') as total
                    FROM class_sessions cs
                    LEFT JOIN attendance a ON cs.id = a.session_id
                    WHERE cs.user_id = ? AND cs.is_active = 0 AND cs.course_code = ?
-                   GROUP BY cs.id
+                   GROUP BY cs.id, cs.course_code, cs.start_time
                    ORDER BY cs.start_time DESC
-                   LIMIT ?""",
+                   LIMIT ?"""),
                 (user_id, course_code, limit),
             ).fetchall()
         else:
-            sessions = conn.execute(
-                """SELECT cs.id, cs.course_code, cs.start_time,
+            sessions = cursor.execute(
+                _q("""SELECT cs.id, cs.course_code, cs.start_time,
                           COUNT(DISTINCT a.student_id) as attended,
                           (SELECT COUNT(*) FROM students WHERE is_enrolled = 1
                            AND courses LIKE '%' || cs.course_code || '%') as total
                    FROM class_sessions cs
                    LEFT JOIN attendance a ON cs.id = a.session_id
                    WHERE cs.user_id = ? AND cs.is_active = 0
-                   GROUP BY cs.id
+                   GROUP BY cs.id, cs.course_code, cs.start_time
                    ORDER BY cs.start_time DESC
-                   LIMIT ?""",
+                   LIMIT ?"""),
                 (user_id, limit),
             ).fetchall()
 
@@ -1270,37 +1445,38 @@ def get_attendance_trend(user_id, course_code=None, limit=10):
 def get_student_leaderboard(course_code=None, limit=50):
     """Get students ranked by attendance rate."""
     with get_db_connection() as conn:
+        cursor = conn.cursor()
         if course_code:
-            total_sessions = conn.execute(
-                "SELECT COUNT(*) FROM class_sessions WHERE course_code = ? AND is_active = 0",
+            total_sessions = cursor.execute(
+                _q("SELECT COUNT(*) as cnt FROM class_sessions WHERE course_code = ? AND is_active = 0"),
                 (course_code,),
-            ).fetchone()[0]
+            ).fetchone()["cnt"]
 
-            students = conn.execute(
-                """SELECT s.student_id, s.name, s.level,
+            students = cursor.execute(
+                _q("""SELECT s.student_id, s.name, s.level,
                           COUNT(a.id) as attended
                    FROM students s
                    LEFT JOIN attendance a ON s.student_id = a.student_id AND a.course_code = ?
                    WHERE s.is_enrolled = 1 AND s.courses LIKE ?
-                   GROUP BY s.student_id
+                   GROUP BY s.student_id, s.name, s.level
                    ORDER BY attended DESC
-                   LIMIT ?""",
+                   LIMIT ?"""),
                 (course_code, f"%{course_code}%", limit),
             ).fetchall()
         else:
-            total_sessions = conn.execute(
-                "SELECT COUNT(*) FROM class_sessions WHERE is_active = 0"
-            ).fetchone()[0]
+            total_sessions = cursor.execute(
+                "SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0"
+            ).fetchone()["cnt"]
 
-            students = conn.execute(
-                """SELECT s.student_id, s.name, s.level,
+            students = cursor.execute(
+                _q("""SELECT s.student_id, s.name, s.level,
                           COUNT(a.id) as attended
                    FROM students s
                    LEFT JOIN attendance a ON s.student_id = a.student_id
                    WHERE s.is_enrolled = 1
-                   GROUP BY s.student_id
+                   GROUP BY s.student_id, s.name, s.level
                    ORDER BY attended DESC
-                   LIMIT ?""",
+                   LIMIT ?"""),
                 (limit,),
             ).fetchall()
 
@@ -1325,11 +1501,70 @@ def get_student_leaderboard(course_code=None, limit=50):
 
 
 def get_lecturer_courses(user_id):
-    """Get distinct course codes from lecturer's sessions."""
+    """Get course codes from lecturer settings, student enrollments, and past sessions.
+
+    Priority order: lecturer's own courses first, then student enrollments,
+    then past session courses. Duplicates are removed preserving priority order.
+    """
     with get_db_connection() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT course_code FROM class_sessions WHERE user_id = ? ORDER BY course_code",
+        cursor = conn.cursor()
+        courses = []
+        seen = set()
+
+        # 1. Lecturer's own configured courses (highest priority)
+        user = cursor.execute(
+            _q("SELECT courses FROM users WHERE id = ?"), (user_id,)
+        ).fetchone()
+        if user and user["courses"]:
+            try:
+                lecturer_courses = json.loads(user["courses"])
+                for c in lecturer_courses:
+                    if c and c not in seen:
+                        courses.append(c)
+                        seen.add(c)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # 2. Courses from enrolled students
+        rows = cursor.execute(
+            "SELECT DISTINCT courses FROM students WHERE is_enrolled = 1 AND courses IS NOT NULL AND courses != ''"
+        ).fetchall()
+        for row in rows:
+            try:
+                student_courses = json.loads(row["courses"])
+                for c in student_courses:
+                    if c and c not in seen:
+                        courses.append(c)
+                        seen.add(c)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # 3. Past session courses
+        session_rows = cursor.execute(
+            _q("SELECT DISTINCT course_code FROM class_sessions WHERE user_id = ? ORDER BY course_code"),
             (user_id,),
+        ).fetchall()
+        for row in session_rows:
+            c = row["course_code"]
+            if c and c not in seen:
+                courses.append(c)
+                seen.add(c)
+
+        return courses
+
+
+def get_recent_session_courses(user_id, limit=2):
+    """Get the most recently used course codes for quick-start."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute(
+            _q("""SELECT course_code, MAX(start_time) as last_used
+               FROM class_sessions
+               WHERE user_id = ?
+               GROUP BY course_code
+               ORDER BY last_used DESC
+               LIMIT ?"""),
+            (user_id, limit),
         ).fetchall()
         return [row["course_code"] for row in rows]
 
