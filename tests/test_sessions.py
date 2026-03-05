@@ -7,9 +7,10 @@ from db_helper import (
     init_database, get_db_connection, create_session, end_session, 
     get_active_session, record_attendance, get_session_history, 
     get_session_attendance, delete_session, set_database_path, get_database_path,
-    create_user
+    create_user, add_student
 )
 import json
+import db_helper
 
 
 # Test user ID (created in setup)
@@ -202,3 +203,49 @@ def test_user_isolation():
     session_ids_2 = [s['id'] for s in history2]
     assert session2_id in session_ids_2
     assert session1_id not in session_ids_2
+
+
+def test_attendance_linking_full_flow():
+    """
+    Detailed test to verify that attendance is correctly linked to an active session
+    when the student is enrolled in the course.
+    """
+    course_code = "MTE401"
+    student_id = "SALAKO001"
+    
+    # 1. Enroll student in the course
+    add_student(
+        student_id=student_id,
+        name="Salako Akolade",
+        email="salako@test.com",
+        level="400",
+        courses=[course_code],
+        status='approved'
+    )
+    
+    # 2. Start a session for that course
+    session_id = create_session(course_code, TEST_USER_ID)
+    
+    # 3. Record attendance
+    # This imitates the call in app.py's gen_frames
+    record_id = record_attendance(student_id, course_code=course_code)
+    assert record_id is not None, "Attendance should be recorded successfully"
+    
+    # 4. Verify it appears in session attendance
+    records = get_session_attendance(session_id)
+    assert len(records) == 1
+    assert records[0]['student_id'] == student_id
+    assert records[0]['course_code'] == course_code
+    assert records[0]['status'] == 'present'
+
+
+def test_record_attendance_returns_dict_with_status():
+    """record_attendance should return a dict with 'status' key."""
+    user_id = db_helper.create_user("ret@test.com", "hash", "Test")
+    db_helper.create_session("MTE411", user_id)
+    db_helper.add_student("RET001", "Test Student", face_encoding=b"fake", courses=["MTE411"])
+    result = db_helper.record_attendance("RET001", status="present", course_code="MTE411")
+    assert result is not None
+    assert isinstance(result, dict)
+    assert "status" in result
+    assert result["status"] in ("present", "late")
