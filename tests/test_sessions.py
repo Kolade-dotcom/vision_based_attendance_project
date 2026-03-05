@@ -89,35 +89,41 @@ def test_attendance_linking():
 
 def test_controller_start_session():
     """Test start_session_logic controller."""
+    from unittest.mock import patch, MagicMock
     from app import app
     from api.controllers.session_controller import start_session_logic
-    
-    with app.test_request_context('/api/sessions/start', 
-                                  method='POST',
-                                  json={'course_code': 'CS201'}):
-        # Simulate logged-in user
-        from flask import session
-        session['user_id'] = TEST_USER_ID
-        
-        response, status_code = start_session_logic()
-        assert status_code == 201
-        assert response.json['status'] == 'active'
-        assert 'session_id' in response.json
+
+    mock_camera = MagicMock()
+    with patch('api.controllers.session_controller.get_camera', return_value=mock_camera):
+        with app.test_request_context('/api/sessions/start',
+                                      method='POST',
+                                      json={'course_code': 'CS201'}):
+            # Simulate logged-in user
+            from flask import session
+            session['user_id'] = TEST_USER_ID
+
+            response, status_code = start_session_logic()
+            assert status_code == 201
+            assert response.json['status'] == 'active'
+            assert 'session_id' in response.json
 
 def test_controller_end_session():
     """Test end_session_logic controller."""
+    from unittest.mock import patch, MagicMock
     from app import app
     from api.controllers.session_controller import end_session_logic
-    
+
     # First create a session
     sid = create_session('CS202', TEST_USER_ID)
-    
-    with app.test_request_context('/api/sessions/end',
-                                  method='POST',
-                                  json={'session_id': sid}):
-        response, status_code = end_session_logic()
-        assert status_code == 200
-        assert response.json['status'] == 'inactive'
+
+    mock_camera = MagicMock()
+    with patch('api.controllers.session_controller.get_camera', return_value=mock_camera):
+        with app.test_request_context('/api/sessions/end',
+                                      method='POST',
+                                      json={'session_id': sid}):
+            response, status_code = end_session_logic()
+            assert status_code == 200
+            assert response.json['status'] == 'inactive'
 
 
 def test_get_session_history():
