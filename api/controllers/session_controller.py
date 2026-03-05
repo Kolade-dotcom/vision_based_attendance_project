@@ -1,6 +1,5 @@
 from flask import jsonify, request, session as flask_session
 import db_helper
-from camera import get_camera
 
 def start_session_logic():
     """
@@ -19,14 +18,15 @@ def start_session_logic():
             return jsonify({'error': 'Missing course_code'}), 400
             
         session_id = db_helper.create_session(course_code, user_id)
-        
-        # Start Camera
-        try:
-            get_camera().start()
-        except Exception as cam_err:
-            print(f"Warning: Camera failed to start: {cam_err}")
-            
-        return jsonify({'message': 'Session started', 'session_id': session_id, 'course_code': course_code, 'status': 'active'}), 201
+
+        from app import notify_worker
+        worker_notified = notify_worker("session:start", {
+            "session_id": session_id,
+            "course_code": course_code,
+            "user_id": user_id,
+        })
+
+        return jsonify({'message': 'Session started', 'session_id': session_id, 'course_code': course_code, 'status': 'active', 'worker_connected': worker_notified}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -44,8 +44,8 @@ def end_session_logic():
             
         success = db_helper.end_session(session_id)
         if success:
-            # Stop Camera
-            get_camera().stop()
+            from app import notify_worker
+            notify_worker("session:end", {"session_id": session_id})
             return jsonify({'message': 'Session ended', 'status': 'inactive'}), 200
         else:
             return jsonify({'error': 'Session not found or already inactive'}), 404

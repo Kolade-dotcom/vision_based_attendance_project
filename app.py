@@ -1,4 +1,6 @@
 from flask import Flask, jsonify, Response, session, redirect
+from flask import request as flask_request
+from flask_socketio import SocketIO, emit
 import cv2
 import logging
 import os
@@ -42,6 +44,8 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max request size
 # Ensure database is initialized
 db_helper.init_database()
 
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+
 # Register Blueprints
 app.register_blueprint(student_bp, url_prefix="/api")
 app.register_blueprint(attendance_bp, url_prefix="/api")
@@ -52,6 +56,9 @@ app.register_blueprint(dashboard_bp)
 app.register_blueprint(portal_bp)
 app.register_blueprint(portal_api_bp)
 app.register_blueprint(dashboard_api_bp)
+
+from api.routes.worker_routes import worker_bp
+app.register_blueprint(worker_bp)
 
 
 @app.route("/")
@@ -336,6 +343,71 @@ def enrollment_video_feed():
     )
 
 
+# ============================================================================
+# Worker WebSocket Events
+# ============================================================================
+
+WORKER_API_KEY = os.environ.get("WORKER_API_KEY", "dev-worker-key")
+_worker_sid = None
+
+
+@socketio.on("worker:auth")
+def handle_worker_auth(data):
+    global _worker_sid
+    if data.get("api_key") == WORKER_API_KEY:
+        _worker_sid = flask_request.sid
+        emit("worker:auth_ok")
+        logger.info("Worker connected and authenticated")
+    else:
+        emit("worker:auth_fail", {"error": "Invalid API key"})
+        logger.warning("Worker auth failed")
+
+
+@socketio.on("worker:frame")
+def handle_worker_frame(data):
+    """Relay JPEG frame from worker to all dashboard browsers."""
+    emit("camera:frame", data, broadcast=True, include_self=False)
+
+
+@socketio.on("worker:attendance")
+def handle_worker_attendance(data):
+    """Worker reports a recognized student."""
+    try:
+        result = db_helper.record_attendance(
+            student_id=data["student_id"],
+            status=data.get("status", "present"),
+            course_code=data.get("course_code"),
+        )
+        if result:
+            emit("attendance:new", result, broadcast=True, include_self=False)
+    except Exception as e:
+        logger.error(f"Worker attendance error: {e}")
+
+
+@socketio.on("worker:status")
+def handle_worker_status(data):
+    """Relay worker status to all dashboard browsers."""
+    emit("worker:status", data, broadcast=True, include_self=False)
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    global _worker_sid
+    if flask_request.sid == _worker_sid:
+        _worker_sid = None
+        emit("worker:status", {"status": "offline"}, broadcast=True)
+        logger.info("Worker disconnected")
+
+
+def notify_worker(event, data):
+    """Send a command to the connected worker."""
+    global _worker_sid
+    if _worker_sid:
+        socketio.emit(event, data, to=_worker_sid)
+        return True
+    return False
+
+
 if __name__ == "__main__":
     import sys
 
@@ -353,8 +425,8 @@ if __name__ == "__main__":
             logger.info(
                 "You may need to accept the self-signed certificate warning in your browser"
             )
-            app.run(
-                debug=True, host="0.0.0.0", port=5000, ssl_context=(cert_file, key_file)
+            socketio.run(
+                app, debug=True, host="0.0.0.0", port=5000, ssl_context=(cert_file, key_file)
             )
         else:
             logger.error("SSL requested but certificate files not found!")
@@ -365,4 +437,4 @@ if __name__ == "__main__":
     else:
         logger.info("Starting with HTTP (use --ssl for HTTPS)")
         logger.info("For mobile camera access, use ngrok: ngrok http 5000")
-        app.run(debug=True, host="0.0.0.0", port=5000)
+        socketio.run(app, debug=True, host="0.0.0.0", port=5000)
