@@ -1,1 +1,210 @@
-<!DOCTYPE html><html><body><h1>Portal Home</h1><p>Coming soon</p></body></html>
+{% extends "portal/base.html" %}
+
+{% block title %}Home — Lumina{% endblock %}
+
+{% block content %}
+<style>
+  /* === Status Card ======================================================= */
+  .status-card {
+    background-color: var(--brand-muted);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    margin-bottom: var(--space-5);
+  }
+
+  .status-card__name {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-1);
+  }
+
+  .status-card__matric {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-bottom: var(--space-3);
+  }
+
+  .status-card__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1.6;
+    border-radius: var(--radius-full);
+    background-color: var(--success-light);
+    color: var(--success);
+  }
+
+  /* === Today Card ======================================================== */
+  .today-card {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--brand);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin-bottom: var(--space-5);
+  }
+
+  .today-card__course {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+  }
+
+  .today-card__detail {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-top: var(--space-1);
+  }
+
+  /* === Quick Stats ======================================================= */
+  .quick-stats {
+    display: flex;
+    gap: var(--space-5);
+    margin-bottom: var(--space-6);
+  }
+
+  .quick-stat {
+    flex: 1;
+  }
+
+  .quick-stat__number {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 700;
+    color: var(--brand);
+    line-height: 1.1;
+  }
+
+  .quick-stat__label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+
+  /* === Recent Activity ==================================================== */
+  .recent-heading {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: var(--space-3);
+  }
+
+  .recent-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .recent-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .recent-item:last-child {
+    border-bottom: none;
+  }
+
+  .recent-item__date {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 72px;
+  }
+
+  .recent-item__course {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--text-secondary);
+    background-color: var(--surface-sunken);
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-full);
+  }
+
+  .recent-item__status {
+    margin-left: auto;
+  }
+
+  /* === Skeletons ========================================================== */
+  .skeleton-status-card {
+    height: 120px;
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-5);
+  }
+
+  .skeleton-stats {
+    display: flex;
+    gap: var(--space-5);
+    margin-bottom: var(--space-6);
+  }
+
+  .skeleton-stat {
+    flex: 1;
+    height: 64px;
+    border-radius: var(--radius-sm);
+  }
+
+  .skeleton-recent-item {
+    height: 40px;
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-2);
+  }
+</style>
+
+<!-- Loading skeleton -->
+<div id="home-skeleton" aria-busy="true" aria-label="Loading home page">
+  <div class="skeleton skeleton-status-card"></div>
+  <div class="skeleton-stats">
+    <div class="skeleton skeleton-stat"></div>
+    <div class="skeleton skeleton-stat"></div>
+  </div>
+  <div class="skeleton skeleton-recent-item"></div>
+  <div class="skeleton skeleton-recent-item"></div>
+  <div class="skeleton skeleton-recent-item"></div>
+</div>
+
+<!-- Populated content (hidden until loaded) -->
+<div id="home-content" style="display: none;">
+  <!-- Status Card -->
+  <div class="status-card">
+    <h2 class="status-card__name" id="student-name"></h2>
+    <div class="status-card__matric" id="student-matric"></div>
+    <span class="status-card__badge" id="enrollment-badge"></span>
+  </div>
+
+  <!-- Today's Attendance (conditionally shown) -->
+  <div id="today-section" style="display: none;"></div>
+
+  <!-- Quick Stats -->
+  <div class="quick-stats">
+    <div class="quick-stat">
+      <div class="quick-stat__number" id="stat-rate">—</div>
+      <div class="quick-stat__label">Attendance Rate</div>
+    </div>
+    <div class="quick-stat">
+      <div class="quick-stat__number" id="stat-courses">—</div>
+      <div class="quick-stat__label">Courses</div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <h3 class="recent-heading">Recent</h3>
+  <div id="recent-container"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/portal/home.js') }}"></script>
+{% endblock %}

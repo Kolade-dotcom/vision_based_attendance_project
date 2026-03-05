@@ -1,1 +1,176 @@
-<!DOCTYPE html><html><body><h1>Attendance</h1><p>Coming soon</p></body></html>
+{% extends "portal/base.html" %}
+
+{% block title %}Attendance — Lumina{% endblock %}
+
+{% block content %}
+<style>
+  /* === Course Filter ====================================================== */
+  .att-filter {
+    margin-bottom: var(--space-4);
+  }
+
+  .att-filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .att-filter-dropdown {
+    width: 100%;
+  }
+
+  .att-filter-dropdown select {
+    width: 100%;
+  }
+
+  /* === Sticky Summary Bar ================================================= */
+  .att-summary {
+    position: sticky;
+    top: 48px; /* height of portal-topbar */
+    z-index: 50;
+    background-color: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-3) var(--space-4);
+    margin: 0 calc(-1 * var(--space-4));
+    margin-bottom: var(--space-4);
+  }
+
+  @media (min-width: 768px) {
+    .att-summary {
+      top: 92px; /* topbar 48px + desktop nav 44px */
+      border-radius: var(--radius-md);
+      margin: 0 0 var(--space-4);
+    }
+  }
+
+  .att-summary__course {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .att-summary__detail {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-top: var(--space-1);
+  }
+
+  /* === Month Group ======================================================== */
+  .month-header {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: var(--space-3) 0 var(--space-2);
+  }
+
+  /* === Attendance Entry ==================================================== */
+  .att-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .att-entry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .att-entry:last-child {
+    border-bottom: none;
+  }
+
+  .att-entry__date {
+    min-width: 48px;
+    text-align: center;
+  }
+
+  .att-entry__day {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+
+  .att-entry__weekday {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .att-entry__course {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .att-entry__right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .att-entry__time {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* === Skeletons ========================================================== */
+  .skeleton-filter {
+    height: 36px;
+    border-radius: var(--radius-full);
+    width: 200px;
+    margin-bottom: var(--space-4);
+  }
+
+  .skeleton-summary {
+    height: 56px;
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-4);
+  }
+
+  .skeleton-entry {
+    height: 48px;
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-2);
+  }
+</style>
+
+<!-- Loading skeleton -->
+<div id="att-skeleton" aria-busy="true" aria-label="Loading attendance records">
+  <div class="skeleton skeleton-filter"></div>
+  <div class="skeleton skeleton-summary"></div>
+  <div class="skeleton skeleton-entry"></div>
+  <div class="skeleton skeleton-entry"></div>
+  <div class="skeleton skeleton-entry"></div>
+  <div class="skeleton skeleton-entry"></div>
+  <div class="skeleton skeleton-entry"></div>
+</div>
+
+<!-- Populated content (hidden until loaded) -->
+<div id="att-content" style="display: none;">
+  <!-- Course filter -->
+  <div class="att-filter" id="att-filter"></div>
+
+  <!-- Sticky summary bar -->
+  <div class="att-summary" id="att-summary">
+    <div class="att-summary__course" id="summary-course">All Courses</div>
+    <div class="att-summary__detail" id="summary-detail"></div>
+  </div>
+
+  <!-- Attendance list grouped by month -->
+  <div id="att-list-container"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/portal/attendance.js') }}"></script>
+{% endblock %}

@@ -3,6 +3,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import db_helper
 import json
 import base64
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_home_data_logic(student_id):
     """Get student home page data."""
@@ -34,6 +37,7 @@ def get_home_data_logic(student_id):
             'matric': student['student_id'],
             'is_enrolled': bool(student.get('is_enrolled'))
         },
+        'courses': courses,
         'stats': stats,
         'today': today_attendance,
         'recent': recent
@@ -127,3 +131,23 @@ def complete_enrollment_logic(student_id, data):
     db_helper.update_student_enrollment(student_id, encoding_bytes, level, courses)
 
     return jsonify({'status': 'success'})
+
+
+def process_capture_logic(data):
+    """Process captured face frames and return an aggregated encoding."""
+    from face_processor import process_multiple_face_images
+
+    frames = data.get('frames', [])
+    if not frames or len(frames) < 7:
+        return jsonify({'error': 'At least 7 face frames required'}), 400
+
+    result = process_multiple_face_images(frames)
+
+    if result['status'] == 'error':
+        return jsonify(result), 400
+
+    return jsonify({
+        'status': 'success',
+        'face_encoding': result['face_encoding'],
+        'frames_processed': result.get('image_count', 0)
+    })
