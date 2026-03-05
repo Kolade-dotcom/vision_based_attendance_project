@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, Response, session, redirect
+from flask import Flask, jsonify, Response, session, redirect
 import cv2
 import logging
 import os
@@ -12,6 +12,7 @@ from api.routes.face_capture_routes import face_capture_bp
 from api.routes.dashboard_routes import dashboard_bp
 from api.routes.portal_routes import portal_bp
 from api.routes.portal_api_routes import portal_api_bp
+from api.routes.dashboard_api_routes import dashboard_api_bp
 from api.controllers.auth_controller import login_required
 from api.controllers.face_capture_controller import get_user_capture_session
 from camera import get_camera, draw_face_boxes, FaceDetector
@@ -50,6 +51,7 @@ app.register_blueprint(face_capture_bp, url_prefix="/api")
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(portal_bp)
 app.register_blueprint(portal_api_bp)
+app.register_blueprint(dashboard_api_bp)
 
 
 @app.route("/")
