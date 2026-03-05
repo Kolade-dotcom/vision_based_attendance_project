@@ -26,8 +26,9 @@ def student_leaderboard():
 @dashboard_login_required
 def courses():
     user_id = session["user_id"]
-    data = db_helper.get_lecturer_courses(user_id)
-    return jsonify(data)
+    all_courses = db_helper.get_lecturer_courses(user_id)
+    recent = db_helper.get_recent_session_courses(user_id, limit=2)
+    return jsonify({"courses": all_courses, "recent": recent})
 
 
 @dashboard_api_bp.route("/settings", methods=["GET"])

@@ -78,3 +78,11 @@ key.pem
 
 # Database
 database/attendance.db
+
+# Documents / reports
+*.docx
+*.pdf
+*.pptx
+
+# Claude settings
+.claude/

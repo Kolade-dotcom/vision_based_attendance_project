@@ -8,6 +8,9 @@ Usage:
     SERVER_URL=https://your-app.onrender.com WORKER_API_KEY=your-key python worker.py
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import sys
 import time

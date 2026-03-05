@@ -1,7 +1,9 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask import Flask, jsonify, Response, session, redirect
 from flask import request as flask_request
 from flask_socketio import SocketIO, emit
-import cv2
 import logging
 import os
 import time
@@ -10,17 +12,25 @@ from api.routes.student_routes import student_bp
 from api.routes.attendance_routes import attendance_bp
 from api.routes.auth_routes import auth_bp
 from api.routes.session_routes import session_bp
-from api.routes.face_capture_routes import face_capture_bp
 from api.routes.dashboard_routes import dashboard_bp
 from api.routes.portal_routes import portal_bp
 from api.routes.portal_api_routes import portal_api_bp
 from api.routes.dashboard_api_routes import dashboard_api_bp
 from api.controllers.auth_controller import login_required
-from api.controllers.face_capture_controller import get_user_capture_session
-from camera import get_camera, draw_face_boxes, FaceDetector
-from esp32_bridge import get_esp32_bridge
-import face_recognition
-import numpy as np
+
+# Camera/face recognition imports — only available when running locally
+_HAS_CAMERA = False
+try:
+    import cv2
+    import numpy as np
+    import face_recognition
+    from camera import get_camera, draw_face_boxes, FaceDetector
+    from esp32_bridge import get_esp32_bridge
+    from api.routes.face_capture_routes import face_capture_bp
+    from api.controllers.face_capture_controller import get_user_capture_session
+    _HAS_CAMERA = True
+except ImportError:
+    pass
 
 # Import configuration
 try:
@@ -51,7 +61,6 @@ app.register_blueprint(student_bp, url_prefix="/api")
 app.register_blueprint(attendance_bp, url_prefix="/api")
 app.register_blueprint(auth_bp, url_prefix="/api")
 app.register_blueprint(session_bp, url_prefix="/api")
-app.register_blueprint(face_capture_bp, url_prefix="/api")
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(portal_bp)
 app.register_blueprint(portal_api_bp)
@@ -59,6 +68,9 @@ app.register_blueprint(dashboard_api_bp)
 
 from api.routes.worker_routes import worker_bp
 app.register_blueprint(worker_bp)
+
+if _HAS_CAMERA:
+    app.register_blueprint(face_capture_bp, url_prefix="/api")
 
 
 @app.route("/")
