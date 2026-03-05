@@ -71,3 +71,10 @@ instance/
 # Face recognition encodings (can be large)
 encodings/
 *.pkl
+
+# SSL certificates
+cert.pem
+key.pem
+
+# Database
+database/attendance.db
