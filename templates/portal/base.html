@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}Lumina{% endblock %}</title>
+    <meta name="description" content="Lumina — Student attendance portal. View your attendance records and course information." />
+    <meta name="theme-color" content="#6366f1" />
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/favicon.svg') }}" />
+    <meta property="og:title" content="Lumina Student Portal" />
+    <meta property="og:description" content="Student attendance portal — view your records and course information." />
+    <meta property="og:type" content="website" />
 
     <!-- FOUC prevention: apply saved theme before paint -->
     <script>

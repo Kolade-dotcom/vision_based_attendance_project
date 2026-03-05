@@ -312,9 +312,11 @@ def get_user_settings(user_id):
     """Get user settings including courses and system settings."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        user = cursor.execute(_q("SELECT * FROM users WHERE id = ?"), (user_id,)).fetchone()
+        cursor.execute(_q("SELECT * FROM users WHERE id = ?"), (user_id,))
+        user = cursor.fetchone()
         settings = {}
-        rows = cursor.execute("SELECT key, value FROM settings").fetchall()
+        cursor.execute("SELECT key, value FROM settings")
+        rows = cursor.fetchall()
         for row in rows:
             settings[row["key"]] = row["value"]
 
@@ -1196,9 +1198,10 @@ def get_student_by_matric(matric_number):
     """Get student by matric number (student_id)."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        student = cursor.execute(
+        cursor.execute(
             _q("SELECT * FROM students WHERE student_id = ?"), (matric_number,)
-        ).fetchone()
+        )
+        student = cursor.fetchone()
         return dict(student) if student else None
 
 

@@ -1,7 +1,10 @@
 import functools
+import logging
 from flask import session, redirect, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import db_helper
+
+logger = logging.getLogger(__name__)
 
 def student_login_required(view):
     """Decorator requiring student login."""
@@ -61,7 +64,11 @@ def student_signup_logic(data):
         return jsonify({'error': 'Matric number already registered'}), 409
 
     password_hash = generate_password_hash(password)
-    student_id = db_helper.create_student_account(matric, name, email, password_hash)
+    try:
+        student_id = db_helper.create_student_account(matric, name, email, password_hash)
+    except Exception as e:
+        logger.error(f"Student signup DB error: {e}")
+        return jsonify({'error': 'Failed to create account. Please try again.'}), 500
 
     if student_id:
         session.clear()
