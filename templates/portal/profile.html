@@ -1,1 +1,288 @@
-<!DOCTYPE html><html><body><h1>Profile</h1><p>Coming soon</p></body></html>
+{% extends "portal/base.html" %}
+
+{% block title %}Profile — Lumina{% endblock %}
+
+{% block content %}
+<style>
+  /* === Profile Header ====================================================== */
+  .profile-header {
+    margin-bottom: var(--space-6);
+  }
+
+  .profile-header__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .profile-header__name {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .profile-header__matric {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+
+  /* === Edit Form Fields ==================================================== */
+  .profile-field {
+    margin-bottom: var(--space-4);
+  }
+
+  .profile-field__value {
+    font-size: var(--text-base);
+    color: var(--text-primary);
+  }
+
+  .profile-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+  }
+
+  /* === Section Cards ======================================================= */
+  .profile-section {
+    margin-bottom: var(--space-5);
+  }
+
+  .profile-section__heading {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 var(--space-4);
+  }
+
+  .profile-section__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .profile-section__label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .profile-section__value {
+    font-size: var(--text-base);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* === Course Chips ======================================================== */
+  .course-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+
+  .course-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--brand);
+    background-color: var(--brand-light);
+    border-radius: var(--radius-full);
+  }
+
+  .course-chip__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--brand);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    border-radius: var(--radius-full);
+    transition: var(--transition-colors);
+  }
+
+  .course-chip__remove:hover {
+    background-color: var(--danger-light);
+    color: var(--danger);
+  }
+
+  .course-add {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+
+  .course-add .input {
+    flex: 1;
+    min-height: 36px;
+  }
+
+  /* === Password Section ==================================================== */
+  .password-field {
+    margin-bottom: var(--space-4);
+  }
+
+  /* === Logout ============================================================== */
+  .profile-logout {
+    margin-top: var(--space-7);
+    margin-bottom: var(--space-5);
+  }
+
+  .btn-full {
+    width: 100%;
+  }
+
+  /* === Skeletons ============================================================ */
+  .skeleton-profile-header {
+    height: 80px;
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-6);
+  }
+
+  .skeleton-profile-card {
+    height: 100px;
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-5);
+  }
+</style>
+
+<!-- Loading skeleton -->
+<div id="profile-skeleton" aria-busy="true" aria-label="Loading profile">
+  <div class="skeleton skeleton-profile-header"></div>
+  <div class="skeleton skeleton-profile-card"></div>
+  <div class="skeleton skeleton-profile-card"></div>
+  <div class="skeleton skeleton-profile-card"></div>
+</div>
+
+<!-- Populated content (hidden until loaded) -->
+<div id="profile-content" style="display: none;">
+
+  <!-- 1. Profile Header -->
+  <div class="profile-header">
+    <div class="profile-header__top">
+      <div>
+        <h2 class="profile-header__name" id="profile-name"></h2>
+        <div class="profile-header__matric" id="profile-matric"></div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-profile">Edit</button>
+    </div>
+
+    <!-- Edit mode (hidden by default) -->
+    <div id="profile-edit-form" style="display: none;">
+      <div class="profile-field">
+        <label class="label" for="edit-name">Name</label>
+        <input type="text" id="edit-name" class="input" autocomplete="name" />
+      </div>
+      <div class="profile-field">
+        <label class="label" for="edit-email">Email</label>
+        <input type="email" id="edit-email" class="input" autocomplete="email" />
+      </div>
+      <div class="profile-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-profile">Save</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-profile">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Academic Info -->
+  <div class="profile-section card card-padded">
+    <h3 class="profile-section__heading">Academic Info</h3>
+
+    <!-- Level -->
+    <div class="profile-section__row">
+      <div>
+        <div class="profile-section__label">Level</div>
+        <div class="profile-section__value" id="profile-level"></div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-academic">Edit</button>
+    </div>
+
+    <!-- Level edit (hidden by default) -->
+    <div id="academic-edit-form" style="display: none;">
+      <div class="profile-field">
+        <label class="label" for="edit-level">Level</label>
+        <select id="edit-level" class="input">
+          <option value="100">100</option>
+          <option value="200">200</option>
+          <option value="300">300</option>
+          <option value="400">400</option>
+          <option value="500">500</option>
+        </select>
+      </div>
+      <div class="profile-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-academic">Save</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-academic">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Courses -->
+    <div>
+      <div class="profile-section__label">Courses</div>
+      <div class="course-chips" id="course-chips"></div>
+
+      <!-- Course add (shown in academic edit mode) -->
+      <div id="course-add-form" style="display: none;">
+        <div class="course-add">
+          <input
+            type="text"
+            id="add-course-input"
+            class="input"
+            placeholder="e.g. MTE411"
+            maxlength="10"
+          />
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-add-course">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Face Enrollment -->
+  <div class="profile-section card card-padded">
+    <h3 class="profile-section__heading">Face Recognition</h3>
+    <div class="profile-section__row">
+      <span id="face-status"></span>
+      <a href="/portal/enroll" class="btn btn-secondary btn-sm">Re-capture Face</a>
+    </div>
+  </div>
+
+  <!-- 4. Security -->
+  <div class="profile-section card card-padded">
+    <h3 class="profile-section__heading">Change Password</h3>
+    <div class="password-field">
+      <label class="label" for="current-password">Current password</label>
+      <input type="password" id="current-password" class="input" autocomplete="current-password" />
+    </div>
+    <div class="password-field">
+      <label class="label" for="new-password">New password</label>
+      <input type="password" id="new-password" class="input" autocomplete="new-password" />
+    </div>
+    <button type="button" class="btn btn-primary" id="btn-change-password">Update Password</button>
+    <div id="password-message" style="display: none; margin-top: var(--space-3); font-size: var(--text-sm);"></div>
+  </div>
+
+  <!-- 5. Logout -->
+  <div class="profile-logout">
+    <a href="/api/portal/auth/logout" class="btn btn-danger btn-full">Sign Out</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/portal/profile.js') }}"></script>
+{% endblock %}
