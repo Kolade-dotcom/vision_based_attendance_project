@@ -1,6 +1,46 @@
 import { apiClient } from "../api/client.js";
-import { uiHelpers } from "../modules/ui.js";
+import { escapeHtml, uiHelpers } from "../modules/ui.js";
 import { Combobox } from "../combobox.js";
+
+/**
+ * Modal Helper Functions
+ */
+function openModal(modalEl) {
+  if (!modalEl) return;
+  document.body.classList.add("modal-open");
+  modalEl.classList.remove("hidden");
+
+  const backdrop = modalEl.querySelector("[data-modal-backdrop]");
+  const content = modalEl.querySelector("[data-modal-content]");
+
+  if (backdrop) {
+    backdrop.classList.remove("closing");
+    backdrop.classList.add("modal-backdrop");
+  }
+  if (content) {
+    content.classList.remove("closing");
+    content.classList.add("modal-content");
+  }
+
+  modalEl.dataset.state = "open";
+}
+
+function closeModal(modalEl) {
+  if (!modalEl) return;
+
+  const backdrop = modalEl.querySelector("[data-modal-backdrop]");
+  const content = modalEl.querySelector("[data-modal-content]");
+
+  if (backdrop) backdrop.classList.add("closing");
+  if (content) content.classList.add("closing");
+
+  modalEl.dataset.state = "closed";
+
+  setTimeout(() => {
+    modalEl.classList.add("hidden");
+    document.body.classList.remove("modal-open");
+  }, 150);
+}
 
 /**
  * Initialize Dashboard Page
@@ -257,20 +297,12 @@ async function endSession() {
 
   // Show Modal
   const modal = document.getElementById("end-session-modal");
-  const backdrop = document.getElementById("modal-backdrop");
-  const panel = document.getElementById("modal-panel");
   const confirmBtn = document.getElementById("confirm-end-session");
   const cancelBtn = document.getElementById("cancel-end-session");
 
   if (!modal) return;
 
-  // Open Modal logic
-  modal.classList.remove("hidden");
-  // Animation delay
-  requestAnimationFrame(() => {
-    backdrop.dataset.state = "open";
-    panel.dataset.state = "open";
-  });
+  openModal(modal);
 
   // Handle Confirm
   const handleConfirm = async () => {
@@ -286,7 +318,7 @@ async function endSession() {
         loadSessionHistory();
         stopCamera();
         showToast("Session Ended", "Attendance session closed.", "default");
-        closeModal();
+        closeModal(modal);
       } else {
         const data = await response.json();
         showToast(
@@ -294,32 +326,27 @@ async function endSession() {
           "Error ending session: " + (data.error || "Unknown error"),
           "error"
         );
-        closeModal(); // Optional: keep open on error? No, better to close.
+        closeModal(modal);
       }
     } catch (e) {
       console.error(e);
       showToast("Error", "Failed to process request", "error");
-      closeModal();
+      closeModal(modal);
     }
   };
 
   // Handle Close
-  const closeModal = () => {
-    backdrop.dataset.state = "closed";
-    panel.dataset.state = "closed";
-    setTimeout(() => {
-      modal.classList.add("hidden");
-      // cleanup listeners to avoid duplicates if opened again without reload (though wrapper approach avoids this usually, let's safe guard)
-      confirmBtn.removeEventListener("click", onConfirmClick);
-      cancelBtn.removeEventListener("click", onCancelClick);
-    }, 200);
+  const handleClose = () => {
+    closeModal(modal);
+    confirmBtn.removeEventListener("click", onConfirmClick);
+    cancelBtn.removeEventListener("click", onCancelClick);
   };
 
   // Event Listeners (One-time wrapper)
   const onConfirmClick = () => handleConfirm();
-  const onCancelClick = () => closeModal();
+  const onCancelClick = () => handleClose();
 
-  confirmBtn.onclick = onConfirmClick; // Simple assignment to overwrite previous if any
+  confirmBtn.onclick = onConfirmClick;
   cancelBtn.onclick = onCancelClick;
 }
 
@@ -477,18 +504,18 @@ async function loadSessionHistory() {
         : "Active";
 
       tr.innerHTML = `
-                <td class="p-4 align-middle">${session.course_code}</td>
+                <td class="p-4 align-middle">${escapeHtml(session.course_code)}</td>
                 <td class="p-4 align-middle">${start}</td>
                 <td class="p-4 align-middle">${end}</td>
                 <td class="p-4 align-middle">
                     <div class="flex gap-2">
-                        <button onclick="viewSessionAttendance(${session.id}, '${session.course_code}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
+                        <button onclick="viewSessionAttendance(${Number(session.id)}, '${escapeHtml(session.course_code)}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
                             <i data-lucide="eye" class="h-4 w-4 mr-1"></i> View
                         </button>
-                        <a href="/api/sessions/${session.id}/export" target="_blank" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
+                        <a href="/api/sessions/${Number(session.id)}/export" target="_blank" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 border border-slate-200 bg-white hover:bg-slate-100 h-9 px-3">
                             <i data-lucide="download" class="h-4 w-4 mr-1"></i> Export
                         </a>
-                        <button onclick="confirmDeleteSession(${session.id}, '${session.course_code}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 border border-red-200 bg-white hover:bg-red-50 text-red-600 h-9 px-3">
+                        <button onclick="confirmDeleteSession(${Number(session.id)}, '${escapeHtml(session.course_code)}')" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 border border-red-200 bg-white hover:bg-red-50 text-red-600 h-9 px-3">
                             <i data-lucide="trash-2" class="h-4 w-4 mr-1"></i> Delete
                         </button>
                     </div>
@@ -511,8 +538,6 @@ window.viewSessionAttendance = async function (sessionId, courseCode) {
     const records = await response.json();
 
     const modal = document.getElementById("view-attendance-modal");
-    const backdrop = document.getElementById("view-modal-backdrop");
-    const panel = document.getElementById("view-modal-panel");
     const titleEl = document.getElementById("view-modal-title");
     const tbody = document.getElementById("view-attendance-tbody");
 
@@ -532,8 +557,8 @@ window.viewSessionAttendance = async function (sessionId, courseCode) {
         const tr = document.createElement("tr");
         tr.className = "border-b transition-colors hover:bg-slate-100/50";
         tr.innerHTML = `
-          <td class="p-4 align-middle">${r.student_id}</td>
-          <td class="p-4 align-middle">${r.student_name}</td>
+          <td class="p-4 align-middle">${escapeHtml(r.student_id)}</td>
+          <td class="p-4 align-middle">${escapeHtml(r.student_name)}</td>
           <td class="p-4 align-middle">${new Date(
             r.timestamp
           ).toLocaleString()}</td>
@@ -541,18 +566,13 @@ window.viewSessionAttendance = async function (sessionId, courseCode) {
             r.status === "present"
               ? "bg-green-50 text-green-700"
               : "bg-yellow-50 text-yellow-700"
-          }">${r.status}</span></td>
+          }">${escapeHtml(r.status)}</span></td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    // Open Modal
-    modal.classList.remove("hidden");
-    requestAnimationFrame(() => {
-      backdrop.dataset.state = "open";
-      panel.dataset.state = "open";
-    });
+    openModal(modal);
 
     // Re-initialize Lucide icons for dynamically added content
     if (window.lucide) lucide.createIcons();
@@ -565,12 +585,7 @@ window.viewSessionAttendance = async function (sessionId, courseCode) {
 
 window.closeViewAttendanceModal = function () {
   const modal = document.getElementById("view-attendance-modal");
-  const backdrop = document.getElementById("view-modal-backdrop");
-  const panel = document.getElementById("view-modal-panel");
-
-  backdrop.dataset.state = "closed";
-  panel.dataset.state = "closed";
-  setTimeout(() => modal.classList.add("hidden"), 200);
+  closeModal(modal);
 };
 
 // --- Delete Session ---
@@ -580,8 +595,6 @@ window.confirmDeleteSession = function (sessionId, courseCode) {
   pendingDeleteSessionId = sessionId;
 
   const modal = document.getElementById("delete-session-modal");
-  const backdrop = document.getElementById("delete-modal-backdrop");
-  const panel = document.getElementById("delete-modal-panel");
   const courseEl = document.getElementById("delete-session-course");
 
   if (!modal) {
@@ -590,25 +603,13 @@ window.confirmDeleteSession = function (sessionId, courseCode) {
   }
 
   courseEl.textContent = courseCode;
-
-  modal.classList.remove("hidden");
-  requestAnimationFrame(() => {
-    backdrop.dataset.state = "open";
-    panel.dataset.state = "open";
-  });
+  openModal(modal);
 };
 
 window.closeDeleteModal = function () {
   const modal = document.getElementById("delete-session-modal");
-  const backdrop = document.getElementById("delete-modal-backdrop");
-  const panel = document.getElementById("delete-modal-panel");
-
-  backdrop.dataset.state = "closed";
-  panel.dataset.state = "closed";
-  setTimeout(() => {
-    modal.classList.add("hidden");
-    pendingDeleteSessionId = null;
-  }, 200);
+  closeModal(modal);
+  pendingDeleteSessionId = null;
 };
 
 window.executeDeleteSession = async function () {
