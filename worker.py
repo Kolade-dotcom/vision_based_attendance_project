@@ -234,6 +234,21 @@ def on_auth_fail(data):
     sio.disconnect()
 
 
+@sio.on("worker:process_faces")
+def on_process_faces(data):
+    """Process face frames for enrollment (relayed from cloud)."""
+    logger.info(f"Received face processing request ({len(data.get('frames', []))} frames)")
+    try:
+        from face_processor import process_multiple_face_images
+
+        result = process_multiple_face_images(data["frames"])
+        sio.emit("worker:faces_processed", result)
+        logger.info(f"Face processing complete: {result.get('status')}, {result.get('image_count', 0)} images")
+    except Exception as e:
+        logger.error(f"Face processing error: {e}")
+        sio.emit("worker:faces_processed", {"status": "error", "error": str(e)})
+
+
 @sio.on("session:start")
 def on_session_start(data):
     global active_session

@@ -134,20 +134,41 @@ def complete_enrollment_logic(student_id, data):
 
 
 def process_capture_logic(data):
-    """Process captured face frames and return an aggregated encoding."""
-    from face_processor import process_multiple_face_images
+    """Process captured face frames and return an aggregated encoding.
 
+    On local (where face_recognition is installed) processes directly.
+    On cloud, relays frames to the connected worker via WebSocket.
+    """
     frames = data.get('frames', [])
     if not frames or len(frames) < 7:
         return jsonify({'error': 'At least 7 face frames required'}), 400
 
-    result = process_multiple_face_images(frames)
+    # Try local processing first (when face_recognition is available)
+    try:
+        from face_processor import process_multiple_face_images
+        result = process_multiple_face_images(frames)
+        if result['status'] == 'error':
+            return jsonify(result), 400
+        return jsonify({
+            'status': 'success',
+            'face_encoding': result['face_encoding'],
+            'frames_processed': result.get('image_count', 0)
+        })
+    except ImportError:
+        pass
 
-    if result['status'] == 'error':
+    # Cloud mode: relay to worker via WebSocket
+    from app import relay_face_processing
+    result = relay_face_processing(frames)
+    if result is None:
+        return jsonify({'error': 'Face processing is not available. The local worker is not connected. Please start the worker on your laptop.'}), 503
+    if result.get('status') == 'timeout':
+        return jsonify({'error': 'Face processing timed out. The worker may be busy. Please try again.'}), 504
+    if result.get('status') == 'error':
         return jsonify(result), 400
 
     return jsonify({
         'status': 'success',
-        'face_encoding': result['face_encoding'],
+        'face_encoding': result.get('face_encoding'),
         'frames_processed': result.get('image_count', 0)
     })

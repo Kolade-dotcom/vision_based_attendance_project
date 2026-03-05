@@ -420,6 +420,39 @@ def notify_worker(event, data):
     return False
 
 
+# --- Face processing relay (cloud → worker → cloud) ---
+import threading
+
+_face_processing_result = {}
+_face_processing_event = threading.Event()
+
+
+@socketio.on("worker:faces_processed")
+def handle_faces_processed(data):
+    """Worker sends back processed face encoding."""
+    _face_processing_result.clear()
+    _face_processing_result.update(data)
+    _face_processing_event.set()
+    logger.info("Received face processing result from worker")
+
+
+def relay_face_processing(frames):
+    """Send frames to worker for processing and wait for result."""
+    global _worker_sid
+    if not _worker_sid:
+        return None
+
+    _face_processing_event.clear()
+    _face_processing_result.clear()
+
+    socketio.emit("worker:process_faces", {"frames": frames}, to=_worker_sid)
+
+    if not _face_processing_event.wait(timeout=120):
+        return {"status": "timeout"}
+
+    return dict(_face_processing_result)
+
+
 if __name__ == "__main__":
     import sys
 
