@@ -1,1 +1,293 @@
-<!DOCTYPE html><html><body><h1>Dashboard Login</h1><p>Coming soon</p></body></html>
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in — Lumina</title>
+
+    <!-- FOUC prevention: apply saved theme before paint -->
+    <script>
+      (function() {
+        var saved = localStorage.getItem('lumina-theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = saved || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/design-system.css') }}" />
+
+    <style>
+      .login-page {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: var(--space-4);
+      }
+
+      .login-card {
+        width: 100%;
+        max-width: 420px;
+        background-color: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+        padding: var(--space-7) var(--space-6);
+      }
+
+      @media (max-width: 480px) {
+        .login-card {
+          max-width: none;
+          padding: var(--space-6) var(--space-5);
+          border-radius: var(--radius-md);
+        }
+      }
+
+      /* --- Logo -------------------------------------------------------------- */
+      .login-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-3);
+        margin-bottom: var(--space-1);
+      }
+
+      .login-logo-icon {
+        font-size: var(--text-3xl);
+        line-height: 1;
+        color: var(--brand);
+      }
+
+      .login-logo-text {
+        font-family: var(--font-display);
+        font-size: var(--text-3xl);
+        font-weight: 700;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+      }
+
+      .login-subtitle {
+        text-align: center;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin-bottom: var(--space-6);
+      }
+
+      /* --- Tab Toggle -------------------------------------------------------- */
+      .login-tabs {
+        display: flex;
+        background-color: var(--surface-sunken);
+        border-radius: var(--radius-full);
+        padding: 3px;
+        margin-bottom: var(--space-5);
+      }
+
+      .login-tab {
+        flex: 1;
+        padding: var(--space-2) var(--space-3);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        font-weight: 600;
+        text-align: center;
+        color: var(--text-secondary);
+        background: none;
+        border: none;
+        border-radius: var(--radius-full);
+        cursor: pointer;
+        transition: var(--transition-colors);
+      }
+
+      .login-tab:hover {
+        color: var(--text-primary);
+      }
+
+      .login-tab:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: -2px;
+      }
+
+      .login-tab[aria-selected="true"] {
+        background-color: var(--surface-raised);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-xs);
+      }
+
+      /* --- Form -------------------------------------------------------------- */
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+      }
+
+      .login-form[hidden] {
+        display: none;
+      }
+
+      .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+
+      .login-submit {
+        width: 100%;
+        margin-top: var(--space-2);
+      }
+
+      /* --- Error Message ----------------------------------------------------- */
+      .login-error {
+        font-size: var(--text-sm);
+        color: var(--danger);
+        min-height: 1.4em;
+      }
+
+      .login-error:empty {
+        display: none;
+      }
+
+      /* --- Footer Link ------------------------------------------------------- */
+      .login-footer {
+        text-align: center;
+        margin-top: var(--space-5);
+        font-size: var(--text-sm);
+        color: var(--text-muted);
+      }
+
+      .login-footer a {
+        color: var(--brand);
+        font-weight: 500;
+      }
+
+      .login-footer a:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-page">
+      <div class="login-card">
+        <!-- Logo -->
+        <div class="login-logo">
+          <span class="login-logo-icon" aria-hidden="true">&#x25CE;</span>
+          <span class="login-logo-text">Lumina</span>
+        </div>
+        <p class="login-subtitle">Lecturer Dashboard</p>
+
+        <!-- Tab Toggle -->
+        <div class="login-tabs" role="tablist" aria-label="Authentication mode">
+          <button
+            type="button"
+            class="login-tab"
+            role="tab"
+            id="tab-signin"
+            aria-selected="true"
+            aria-controls="panel-signin"
+          >Sign in</button>
+          <button
+            type="button"
+            class="login-tab"
+            role="tab"
+            id="tab-signup"
+            aria-selected="false"
+            aria-controls="panel-signup"
+          >Create account</button>
+        </div>
+
+        <!-- Sign in Form -->
+        <form
+          class="login-form"
+          id="panel-signin"
+          role="tabpanel"
+          aria-labelledby="tab-signin"
+          novalidate
+        >
+          <div class="form-field">
+            <label class="label" for="signin-email">Email</label>
+            <input
+              class="input"
+              type="email"
+              id="signin-email"
+              name="email"
+              autocomplete="email"
+              required
+              placeholder="lecturer@university.edu"
+            />
+          </div>
+          <div class="form-field">
+            <label class="label" for="signin-password">Password</label>
+            <input
+              class="input"
+              type="password"
+              id="signin-password"
+              name="password"
+              autocomplete="current-password"
+              required
+              placeholder="Enter your password"
+            />
+          </div>
+          <div class="login-error" id="signin-error" role="alert" aria-live="polite"></div>
+          <button type="submit" class="btn btn-primary login-submit">Sign in</button>
+        </form>
+
+        <!-- Create account Form -->
+        <form
+          class="login-form"
+          id="panel-signup"
+          role="tabpanel"
+          aria-labelledby="tab-signup"
+          hidden
+          novalidate
+        >
+          <div class="form-field">
+            <label class="label" for="signup-name">Name</label>
+            <input
+              class="input"
+              type="text"
+              id="signup-name"
+              name="name"
+              autocomplete="name"
+              required
+              placeholder="Dr. Jane Smith"
+            />
+          </div>
+          <div class="form-field">
+            <label class="label" for="signup-email">Email</label>
+            <input
+              class="input"
+              type="email"
+              id="signup-email"
+              name="email"
+              autocomplete="email"
+              required
+              placeholder="lecturer@university.edu"
+            />
+          </div>
+          <div class="form-field">
+            <label class="label" for="signup-password">Password</label>
+            <input
+              class="input"
+              type="password"
+              id="signup-password"
+              name="password"
+              autocomplete="new-password"
+              required
+              placeholder="Create a password"
+            />
+          </div>
+          <div class="login-error" id="signup-error" role="alert" aria-live="polite"></div>
+          <button type="submit" class="btn btn-primary login-submit">Create account</button>
+        </form>
+
+        <!-- Footer -->
+        <p class="login-footer">
+          Are you a student? <a href="/portal/login">Go to Student Portal</a>
+        </p>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard/login.js') }}"></script>
+  </body>
+</html>
