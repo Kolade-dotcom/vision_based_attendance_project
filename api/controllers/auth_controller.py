@@ -1,5 +1,5 @@
 import functools
-from flask import session, redirect, url_for, request, jsonify
+from flask import session, redirect, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import db_helper
 
@@ -8,7 +8,7 @@ def login_required(view):
     @functools.wraps(view)
     def wrapped_view(**kwargs):
         if 'user_id' not in session:
-            return redirect(url_for('login'))
+            return redirect('/dashboard/login')
         return view(**kwargs)
     return wrapped_view
 
@@ -59,4 +59,4 @@ def signup_logic(data):
 def logout_logic():
     """Handle logout."""
     session.clear()
-    return redirect(url_for('login'))
+    return redirect('/dashboard/login')

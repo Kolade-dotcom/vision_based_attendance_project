@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, Response, session
+from flask import Flask, render_template, jsonify, Response, session, redirect
 import cv2
 import logging
 import os
@@ -9,8 +9,9 @@ from api.routes.attendance_routes import attendance_bp
 from api.routes.auth_routes import auth_bp
 from api.routes.session_routes import session_bp
 from api.routes.face_capture_routes import face_capture_bp
-from api.routes.enrollment_link_routes import enrollment_link_bp
-from api.routes.public_enrollment_routes import public_enrollment_bp
+from api.routes.dashboard_routes import dashboard_bp
+from api.routes.portal_routes import portal_bp
+from api.routes.portal_api_routes import portal_api_bp
 from api.controllers.auth_controller import login_required
 from api.controllers.face_capture_controller import get_user_capture_session
 from camera import get_camera, draw_face_boxes, FaceDetector
@@ -46,40 +47,15 @@ app.register_blueprint(attendance_bp, url_prefix="/api")
 app.register_blueprint(auth_bp, url_prefix="/api")
 app.register_blueprint(session_bp, url_prefix="/api")
 app.register_blueprint(face_capture_bp, url_prefix="/api")
-app.register_blueprint(enrollment_link_bp, url_prefix="/api")
-app.register_blueprint(public_enrollment_bp, url_prefix="/api")
+app.register_blueprint(dashboard_bp)
+app.register_blueprint(portal_bp)
+app.register_blueprint(portal_api_bp)
 
 
 @app.route("/")
-@login_required
-def index():
-    """Render the main dashboard page."""
-    return render_template("index.html")
-
-
-@app.route("/enroll")
-@login_required
-def enroll():
-    """Render the enrollment page for new students."""
-    return render_template("enroll.html")
-
-
-@app.route("/login")
-def login():
-    """Render the login page."""
-    return render_template("login.html")
-
-
-@app.route("/enroll/<token>")
-def public_enroll(token):
-    """Public enrollment page for students (token-validated, no login required)."""
-    return render_template("public_enroll.html", token=token)
-
-
-@app.route("/enrollment-success")
-def enrollment_success():
-    """Confirmation page after student submits enrollment."""
-    return render_template("enrollment_success.html")
+def root():
+    """Redirect root to dashboard."""
+    return redirect("/dashboard/")
 
 
 @app.route("/api/health")
