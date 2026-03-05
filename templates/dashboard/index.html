@@ -1,1 +1,506 @@
-<!DOCTYPE html><html><body><h1>Dashboard</h1><p>Coming soon</p></body></html>
+{% extends "dashboard/base.html" %}
+
+{% block title %}Live Session - Lumina{% endblock %}
+
+{% block content %}
+<style>
+  /* --- Header Bar --------------------------------------------------------- */
+  .session-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+  }
+
+  .session-greeting {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+  }
+
+  /* --- Session Control Strip ---------------------------------------------- */
+  .session-strip {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-6);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    transition: border-color 150ms ease;
+  }
+
+  .session-strip.is-active {
+    border-left: 4px solid var(--brand);
+  }
+
+  .session-strip-inactive {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .session-strip-active {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .session-course-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    background-color: var(--brand-light);
+    color: var(--brand);
+    border-radius: var(--radius-full);
+  }
+
+  .session-live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--brand);
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .session-elapsed {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+
+  .session-student-count {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+
+  .session-strip-spacer {
+    flex: 1;
+  }
+
+  .session-select {
+    min-width: 180px;
+    max-width: 260px;
+  }
+
+  /* --- Two-Column Layout -------------------------------------------------- */
+  .session-columns {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: var(--space-5);
+    margin-bottom: var(--space-7);
+  }
+
+  @media (max-width: 900px) {
+    .session-columns {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* --- Camera Feed -------------------------------------------------------- */
+  .camera-card {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: var(--space-5);
+  }
+
+  .camera-aspect {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 */
+    background-color: var(--surface-sunken);
+  }
+
+  .camera-aspect img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .camera-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+
+  /* --- Session Stats ------------------------------------------------------ */
+  .stats-card {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+  }
+
+  .stat-item {
+    padding: var(--space-4) 0;
+  }
+
+  .stat-item + .stat-item {
+    border-top: 1px solid var(--border);
+  }
+
+  .stat-number {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+  }
+
+  .stat-number-present {
+    color: var(--brand);
+  }
+
+  .stat-number-late {
+    color: var(--warning);
+  }
+
+  .stat-number-total {
+    color: var(--text-secondary);
+  }
+
+  .stat-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+
+  /* --- Attendance Table --------------------------------------------------- */
+  .attendance-card {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .attendance-card-header {
+    padding: var(--space-4) var(--space-5);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .attendance-card-header h4 {
+    margin: 0;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  /* --- Row slide-in animation --------------------------------------------- */
+  @keyframes row-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .attendance-row-new {
+    animation: row-slide-in 300ms ease-out;
+  }
+
+  /* --- History Section ---------------------------------------------------- */
+  .history-section {
+    margin-top: var(--space-7);
+  }
+
+  .history-section h3 {
+    margin-bottom: var(--space-4);
+  }
+
+  .history-card {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .btn-danger-ghost {
+    background-color: transparent;
+    color: var(--danger);
+    border-color: transparent;
+  }
+
+  .btn-danger-ghost:hover {
+    background-color: var(--danger-light);
+  }
+
+  /* --- Skeletons ---------------------------------------------------------- */
+  .skeleton-line {
+    height: 16px;
+    margin-bottom: var(--space-2);
+  }
+
+  .skeleton-stat {
+    height: 40px;
+    width: 60px;
+    margin-bottom: var(--space-1);
+  }
+
+  .skeleton-row td {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .skeleton-block {
+    height: 14px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* --- Modal -------------------------------------------------------------- */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background-color: rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-backdrop.is-open {
+    display: flex;
+  }
+
+  .modal-card {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-6);
+    max-width: 420px;
+    width: 90%;
+  }
+
+  .modal-card h4 {
+    margin-bottom: var(--space-2);
+  }
+
+  .modal-card p {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-5);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: var(--space-3);
+    justify-content: flex-end;
+  }
+</style>
+
+<!-- Header Bar -->
+<header class="session-header">
+  <h2 class="session-greeting" id="greeting">Good morning, {{ session.get('user_name', 'Lecturer') }}</h2>
+  <div id="course-selector-container">
+    <!-- Populated by JS: pills or dropdown depending on count -->
+  </div>
+</header>
+
+<!-- Session Control Strip -->
+<section class="session-strip" id="session-strip" aria-label="Session controls">
+  <!-- Inactive state (default) -->
+  <div class="session-strip-inactive" id="strip-inactive">
+    <select class="input session-select" id="session-course-select" aria-label="Select course">
+      <option value="">Select course</option>
+    </select>
+    <button type="button" class="btn btn-primary" id="btn-start-session">Start Session</button>
+  </div>
+  <!-- Active state (hidden by default) -->
+  <div class="session-strip-active" id="strip-active" style="display: none;">
+    <span class="session-course-badge">
+      <span class="session-live-dot" aria-hidden="true"></span>
+      <span id="active-course-code"></span>
+    </span>
+    <span class="session-elapsed" id="session-elapsed" aria-live="polite">00:00:00</span>
+    <span class="session-student-count" id="session-student-count">0 students</span>
+    <span class="session-strip-spacer"></span>
+    <button type="button" class="btn btn-danger btn-sm" id="btn-end-session">End Session</button>
+  </div>
+</section>
+
+<!-- Two-Column Layout -->
+<div class="session-columns">
+  <!-- Left Column -->
+  <div>
+    <!-- Camera Feed -->
+    <section class="camera-card" aria-label="Camera feed">
+      <div class="camera-aspect">
+        <img
+          src="/video_feed"
+          alt="Live camera feed"
+          id="camera-feed"
+          style="display: none;"
+        />
+        <div class="camera-empty" id="camera-empty">
+          Start a session to activate the camera feed
+        </div>
+      </div>
+    </section>
+
+    <!-- Attendance Table -->
+    <section class="attendance-card" aria-label="Live attendance">
+      <div class="attendance-card-header">
+        <h4>Live Attendance</h4>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table" id="attendance-table">
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Student ID</th>
+              <th scope="col">Name</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody id="attendance-tbody">
+            <!-- Loading skeleton -->
+            <tr class="skeleton-row" data-skeleton>
+              <td><div class="skeleton skeleton-block" style="width: 60px;">&nbsp;</div></td>
+              <td><div class="skeleton skeleton-block" style="width: 80px;">&nbsp;</div></td>
+              <td><div class="skeleton skeleton-block" style="width: 120px;">&nbsp;</div></td>
+              <td><div class="skeleton skeleton-block" style="width: 64px;">&nbsp;</div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="attendance-empty" style="display: none;">
+        No attendance recorded yet
+      </div>
+    </section>
+  </div>
+
+  <!-- Right Column: Stats -->
+  <aside>
+    <section class="stats-card" id="stats-card" aria-label="Session statistics">
+      <!-- Loading skeleton -->
+      <div id="stats-skeleton">
+        <div class="stat-item">
+          <div class="skeleton skeleton-stat">&nbsp;</div>
+          <div class="skeleton skeleton-line" style="width: 80px;">&nbsp;</div>
+        </div>
+        <div class="stat-item">
+          <div class="skeleton skeleton-stat">&nbsp;</div>
+          <div class="skeleton skeleton-line" style="width: 60px;">&nbsp;</div>
+        </div>
+        <div class="stat-item">
+          <div class="skeleton skeleton-stat">&nbsp;</div>
+          <div class="skeleton skeleton-line" style="width: 100px;">&nbsp;</div>
+        </div>
+      </div>
+      <!-- Stats content (hidden until loaded) -->
+      <div id="stats-content" style="display: none;">
+        <div class="stat-item">
+          <div class="stat-number stat-number-present" id="stat-present">0</div>
+          <div class="stat-label">Present</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number stat-number-late" id="stat-late">0</div>
+          <div class="stat-label">Late</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number stat-number-total" id="stat-total">0</div>
+          <div class="stat-label">Students enrolled</div>
+        </div>
+      </div>
+      <!-- Empty state -->
+      <div class="empty-state" id="stats-empty" style="display: none;">
+        Start a session to view statistics
+      </div>
+    </section>
+  </aside>
+</div>
+
+<!-- Session History -->
+<section class="history-section" aria-label="Session history">
+  <h3>Session History</h3>
+  <div class="history-card">
+    <div class="table-scroll">
+      <table class="data-table" id="history-table">
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">Course</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Students</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody">
+          <tr class="skeleton-row" data-skeleton>
+            <td><div class="skeleton skeleton-block" style="width: 90px;">&nbsp;</div></td>
+            <td><div class="skeleton skeleton-block" style="width: 70px;">&nbsp;</div></td>
+            <td><div class="skeleton skeleton-block" style="width: 60px;">&nbsp;</div></td>
+            <td><div class="skeleton skeleton-block" style="width: 40px;">&nbsp;</div></td>
+            <td><div class="skeleton skeleton-block" style="width: 100px;">&nbsp;</div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="history-empty" style="display: none;">
+      No past sessions
+    </div>
+  </div>
+</section>
+
+<!-- End Session Modal -->
+<div class="modal-backdrop" id="modal-end-session" role="dialog" aria-modal="true" aria-labelledby="modal-end-title">
+  <div class="modal-card">
+    <h4 id="modal-end-title">End current session?</h4>
+    <p>The camera feed will stop and no further attendance will be recorded for this session.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" data-dismiss="modal-end-session">Cancel</button>
+      <button type="button" class="btn btn-danger" id="btn-confirm-end">End Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Session Modal -->
+<div class="modal-backdrop" id="modal-delete-session" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
+  <div class="modal-card">
+    <h4 id="modal-delete-title">Delete session and all attendance records?</h4>
+    <p>This action cannot be undone. All attendance data for this session will be permanently removed.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" data-dismiss="modal-delete-session">Cancel</button>
+      <button type="button" class="btn btn-danger" id="btn-confirm-delete">Delete</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard/session.js') }}"></script>
+{% endblock %}
