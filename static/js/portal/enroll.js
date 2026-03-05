@@ -31,7 +31,10 @@
     captureTimer: null,
     faceEncoding: null,
     courses: [],
-    processing: false
+    processing: false,
+    faceDetector: null,
+    faceDetectionSupported: false,
+    lastFaceDetected: false
   };
 
   /* ======================================================================
@@ -52,6 +55,33 @@
   var dotStepper = $('dot-stepper');
   var captureInstruction = $('capture-instruction');
   var captureProgress = $('capture-progress');
+  var cameraViewport = $('camera-viewport');
+
+  /* ======================================================================
+     Face detection (browser API)
+     ====================================================================== */
+
+  function initFaceDetection() {
+    if (typeof window.FaceDetector !== 'undefined') {
+      try {
+        state.faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+        state.faceDetectionSupported = true;
+      } catch (e) {
+        state.faceDetectionSupported = false;
+      }
+    }
+  }
+
+  function detectFaceInFrame() {
+    if (!state.faceDetectionSupported || !state.faceDetector) {
+      return Promise.resolve(true); // assume face present if API unavailable
+    }
+    return state.faceDetector.detect(video)
+      .then(function (faces) { return faces.length > 0; })
+      .catch(function () { return true; }); // assume present on error
+  }
+
+  initFaceDetection();
 
   /* ======================================================================
      Step navigation
@@ -107,6 +137,7 @@
       .then(function (stream) {
         state.cameraStream = stream;
         video.srcObject = stream;
+        showCameraView();
         initDotStepper();
         startPose(0);
         goToStep('capture');
@@ -125,6 +156,22 @@
         showError('welcome-error', message);
       });
   });
+
+  /* ======================================================================
+     Camera viewport: show/hide video vs processing overlay
+     ====================================================================== */
+
+  function showCameraView() {
+    video.style.display = '';
+    var overlay = $('processing-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  function showProcessingOverlay() {
+    video.style.display = 'none';
+    var overlay = $('processing-overlay');
+    if (overlay) overlay.style.display = 'flex';
+  }
 
   /* ======================================================================
      Dot stepper
@@ -174,21 +221,33 @@
   function captureFrame() {
     if (state.frameIndex >= FRAMES_PER_POSE) return;
 
-    var ctx = canvas.getContext('2d');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Use face detection to validate before capturing
+    detectFaceInFrame().then(function (faceDetected) {
+      if (!faceDetected) {
+        // Show feedback but don't count this frame
+        captureProgress.textContent = 'No face detected — please position your face in the oval';
+        captureProgress.style.color = 'var(--danger)';
+        return;
+      }
 
-    var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    state.capturedFrames.push(dataUrl);
+      captureProgress.style.color = '';
 
-    state.frameIndex++;
-    captureProgress.textContent = 'Capturing ' + state.frameIndex + '/' + FRAMES_PER_POSE + '...';
+      var ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    if (state.frameIndex >= FRAMES_PER_POSE) {
-      clearInterval(state.captureTimer);
-      advancePose();
-    }
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      state.capturedFrames.push(dataUrl);
+
+      state.frameIndex++;
+      captureProgress.textContent = 'Capturing ' + state.frameIndex + '/' + FRAMES_PER_POSE + '...';
+
+      if (state.frameIndex >= FRAMES_PER_POSE) {
+        clearInterval(state.captureTimer);
+        advancePose();
+      }
+    });
   }
 
   function advancePose() {
@@ -196,8 +255,12 @@
     if (nextIndex < POSES.length) {
       startPose(nextIndex);
     } else {
-      captureProgress.textContent = 'All poses captured. Processing...';
+      // All poses captured — stop camera and show processing state
+      stopCamera();
+      showProcessingOverlay();
       captureInstruction.textContent = 'Processing your photos';
+      captureProgress.textContent = 'This may take up to a minute...';
+      captureProgress.style.color = '';
       updateDotStepper();
       processCapturedFrames();
     }
@@ -228,33 +291,69 @@
       .then(function (result) {
         state.processing = false;
         if (!result.ok) {
-          showError('capture-error', result.data.error || 'Face processing failed. Please try again.');
-          captureProgress.textContent = '';
-          captureInstruction.textContent = 'Processing failed';
+          showProcessingFailed(result.data.error || 'Face processing failed. Please try again.');
           return;
         }
 
         state.faceEncoding = result.data.face_encoding;
-        stopCamera();
         goToStep('details');
       })
-      .catch(function (err) {
+      .catch(function () {
         state.processing = false;
-        showError('capture-error', 'Network error. Please check your connection and try again.');
-        captureProgress.textContent = '';
+        showProcessingFailed('Network error. Please check your connection and try again.');
       });
+  }
+
+  function showProcessingFailed(message) {
+    showCameraView(); // restore camera viewport look
+    showError('capture-error', message);
+    captureInstruction.textContent = 'Processing failed';
+    captureProgress.textContent = 'Tap "Retry" to capture your photos again.';
+
+    // Show retry button
+    var retryBtn = $('btn-capture-retry');
+    if (retryBtn) retryBtn.style.display = '';
   }
 
   /* --- Capture back button --- */
 
   $('btn-capture-back').addEventListener('click', function () {
     stopCamera();
+    resetCaptureState();
+    goToStep('welcome');
+  });
+
+  /* --- Retry button --- */
+
+  var retryBtn = $('btn-capture-retry');
+  if (retryBtn) {
+    retryBtn.addEventListener('click', function () {
+      hideError('capture-error');
+      retryBtn.style.display = 'none';
+      resetCaptureState();
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } })
+        .then(function (stream) {
+          state.cameraStream = stream;
+          video.srcObject = stream;
+          showCameraView();
+          startPose(0);
+        })
+        .catch(function () {
+          goToStep('welcome');
+        });
+    });
+  }
+
+  function resetCaptureState() {
     state.capturedFrames = [];
     state.poseIndex = 0;
     state.frameIndex = 0;
     captureProgress.textContent = '';
-    goToStep('welcome');
-  });
+    captureProgress.style.color = '';
+    captureInstruction.textContent = '';
+    showCameraView();
+  }
 
   /* ======================================================================
      Step 3: Academic details
@@ -311,11 +410,12 @@
 
   $('btn-details-back').addEventListener('click', function () {
     goToStep('capture');
+    resetCaptureState();
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } })
       .then(function (stream) {
         state.cameraStream = stream;
         video.srcObject = stream;
-        state.capturedFrames = [];
+        showCameraView();
         startPose(0);
       })
       .catch(function () {

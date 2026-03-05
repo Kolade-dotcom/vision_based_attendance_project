@@ -193,6 +193,35 @@
         color: var(--text-inverse);
       }
 
+      /* --- Processing overlay --- */
+
+      .processing-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-4);
+        background-color: var(--surface-sunken);
+        z-index: 2;
+      }
+
+      .processing-spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid var(--border-strong);
+        border-top-color: var(--brand);
+        border-radius: 50%;
+        animation: spin 800ms linear infinite;
+      }
+
+      .processing-text {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--text-secondary);
+      }
+
       /* --- Step 3: Details form --- */
 
       .details-heading {
@@ -439,6 +468,11 @@
                   fill="none" opacity="0.6" />
               </svg>
             </div>
+            <!-- Processing overlay (shown after all photos captured) -->
+            <div id="processing-overlay" class="processing-overlay" style="display:none;">
+              <div class="processing-spinner"></div>
+              <p class="processing-text">Analyzing your photos...</p>
+            </div>
           </div>
 
           <p id="capture-progress" class="capture-progress"></p>
@@ -449,9 +483,7 @@
 
           <div class="btn-bar">
             <button type="button" id="btn-capture-back" class="btn btn-secondary btn-lg">Back</button>
-            <button type="button" id="btn-capture-skip" class="btn btn-ghost btn-lg" style="display:none;">
-              Skip pose
-            </button>
+            <button type="button" id="btn-capture-retry" class="btn btn-primary btn-lg" style="display:none;">Retry</button>
           </div>
         </section>
 
