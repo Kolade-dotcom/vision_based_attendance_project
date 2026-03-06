@@ -569,7 +569,9 @@
     <script>
       window.__STUDENT__ = {
         name: {{ session.get('student_name', '') | tojson }},
-        matric: {{ session.get('student_id', '') | tojson }}
+        matric: {{ session.get('student_id', '') | tojson }},
+        isEnrolled: {{ is_enrolled | tojson }},
+        recapture: {{ recapture | tojson }}
       };
     </script>
     <script src="{{ url_for('static', filename='js/portal/enroll.js') }}"></script>

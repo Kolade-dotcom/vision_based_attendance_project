@@ -296,11 +296,47 @@
         }
 
         state.faceEncoding = result.data.face_encoding;
-        goToStep('details');
+
+        // Recapture mode: skip details, just update face and show confirmation
+        if (window.__STUDENT__.recapture && window.__STUDENT__.isEnrolled) {
+          submitRecapture();
+        } else {
+          goToStep('details');
+        }
       })
       .catch(function () {
         state.processing = false;
         showProcessingFailed('Network error. Please check your connection and try again.');
+      });
+  }
+
+  function submitRecapture() {
+    fetch('/api/portal/face', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ face_encoding: state.faceEncoding })
+    })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        if (!result.ok) {
+          showProcessingFailed(result.data.error || 'Failed to update face data.');
+          return;
+        }
+        // Fetch existing profile for summary
+        return fetch('/api/portal/profile')
+          .then(function (res) { return res.json(); })
+          .then(function (profile) {
+            $('summary-name').textContent = profile.name || '';
+            $('summary-matric').textContent = profile.matric || '';
+            $('summary-level').textContent = (profile.level || '') + ' Level';
+            $('summary-courses').textContent = (profile.courses && profile.courses.length)
+              ? profile.courses.join(', ')
+              : 'None yet';
+            goToStep('confirm');
+          });
+      })
+      .catch(function () {
+        showProcessingFailed('Network error. Please try again.');
       });
   }
 

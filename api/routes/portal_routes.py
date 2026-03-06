@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, session, redirect
+from flask import Blueprint, render_template, session, redirect, request
+import db_helper
 from api.controllers.portal_auth_controller import student_login_required, student_enrollment_required
 
 portal_bp = Blueprint('portal', __name__, url_prefix='/portal')
@@ -10,7 +11,10 @@ def login():
 @portal_bp.route('/enroll')
 @student_login_required
 def enroll():
-    return render_template('portal/enroll.html')
+    recapture = request.args.get('recapture', '0') == '1'
+    student = db_helper.get_student_by_matric(session['student_id'])
+    is_enrolled = bool(student and student.get('is_enrolled'))
+    return render_template('portal/enroll.html', recapture=recapture, is_enrolled=is_enrolled)
 
 @portal_bp.route('/')
 @student_enrollment_required
