@@ -54,7 +54,14 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max request size
 # Ensure database is initialized
 db_helper.init_database()
 
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet", max_http_buffer_size=10 * 1024 * 1024)
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="eventlet",
+    max_http_buffer_size=10 * 1024 * 1024,
+    ping_timeout=60,
+    ping_interval=25,
+)
 
 # Register Blueprints
 app.register_blueprint(student_bp, url_prefix="/api")
