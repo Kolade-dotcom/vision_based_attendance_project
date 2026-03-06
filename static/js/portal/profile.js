@@ -3,6 +3,7 @@
 
   var profileData = null;
   var editingCourses = [];
+  var COURSE_CODE_RE = /^[A-Z]{3}\d{3}$/;
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -179,6 +180,10 @@
   btnAddCourse.addEventListener('click', function () {
     var code = addCourseInput.value.trim().toUpperCase();
     if (!code) return;
+    if (!COURSE_CODE_RE.test(code)) {
+      showToast('Course code must be 3 letters + 3 digits (e.g. MTE413)', 'error');
+      return;
+    }
     if (editingCourses.indexOf(code) !== -1) {
       showToast('Course already added', 'warning');
       return;

@@ -57,6 +57,7 @@
 
   var FRAMES_PER_POSE = 3;
   var CAPTURE_INTERVAL_MS = 1500;
+  var COURSE_CODE_RE = /^[A-Z]{3}\d{3}$/;
 
   /* ======================================================================
      State
@@ -465,6 +466,11 @@
   function addCourse() {
     var val = courseInput.value.trim().toUpperCase();
     if (!val) return;
+    if (!COURSE_CODE_RE.test(val)) {
+      showError('details-error', 'Course code must be 3 letters + 3 digits (e.g. MTE413)');
+      return;
+    }
+    hideError('details-error');
     if (state.courses.indexOf(val) !== -1) {
       courseInput.value = '';
       return;

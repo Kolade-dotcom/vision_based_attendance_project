@@ -25,6 +25,8 @@
     passwordFeedback: document.getElementById("password-feedback"),
   };
 
+  var COURSE_CODE_RE = /^[A-Z]{3}\d{3}$/;
+
   function escapeHtml(str) {
     var div = document.createElement("div");
     div.appendChild(document.createTextNode(str || ""));
@@ -102,6 +104,10 @@
   function onAddCourse() {
     var val = dom.newCourseInput.value.trim().toUpperCase();
     if (!val) return;
+    if (!COURSE_CODE_RE.test(val)) {
+      showToast("Course code must be 3 letters + 3 digits (e.g. MTE413)", "error");
+      return;
+    }
     if (state.courses.indexOf(val) !== -1) {
       showToast("Course already added", "warning");
       return;
