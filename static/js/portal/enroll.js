@@ -15,6 +15,46 @@
     { id: 'neutral', label: 'Relax your face' }
   ];
 
+  var POSE_ICONS = {
+    center: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9" stroke-dasharray="4 2"/></svg>',
+    left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>',
+    right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>',
+    smile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="10" r="0.5" fill="currentColor"/><circle cx="15" cy="10" r="0.5" fill="currentColor"/></svg>',
+    neutral: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 15h8"/><circle cx="9" cy="10" r="0.5" fill="currentColor"/><circle cx="15" cy="10" r="0.5" fill="currentColor"/></svg>'
+  };
+
+  var poseHintTimer = null;
+
+  function showPoseHint(poseId, label) {
+    var hint = $('pose-hint');
+    var iconEl = $('pose-hint-icon');
+    var textEl = $('pose-hint-text');
+    if (!hint) return;
+
+    clearTimeout(poseHintTimer);
+    hint.classList.remove('fading');
+    hint.style.display = '';
+
+    iconEl.innerHTML = POSE_ICONS[poseId] || '';
+    textEl.textContent = label;
+
+    // Force reflow to restart animation
+    void hint.offsetWidth;
+    hint.style.animation = 'none';
+    void hint.offsetWidth;
+    hint.style.animation = '';
+
+    poseHintTimer = setTimeout(function () {
+      hint.classList.add('fading');
+      setTimeout(function () {
+        hint.style.display = 'none';
+        hint.classList.remove('fading');
+      }, 400);
+    }, 2500);
+  }
+
   var FRAMES_PER_POSE = 3;
   var CAPTURE_INTERVAL_MS = 1500;
 
@@ -213,6 +253,8 @@
     captureInstruction.textContent = POSES[index].label;
     captureProgress.textContent = 'Capturing 0/' + FRAMES_PER_POSE + '...';
     hideError('capture-error');
+
+    showPoseHint(POSES[index].id, POSES[index].label);
 
     clearInterval(state.captureTimer);
     state.captureTimer = setInterval(captureFrame, CAPTURE_INTERVAL_MS);

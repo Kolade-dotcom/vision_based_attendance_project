@@ -423,6 +423,61 @@
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
+
+      /* --- Pose hint overlay --- */
+
+      .pose-hint {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-3);
+        padding: var(--space-4) var(--space-3);
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+        z-index: 3;
+        pointer-events: none;
+        animation: pose-hint-in 0.35s ease-out;
+      }
+
+      .pose-hint.fading {
+        animation: pose-hint-out 0.4s ease-in forwards;
+      }
+
+      .pose-hint__icon {
+        flex-shrink: 0;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .pose-hint__icon svg {
+        width: 100%;
+        height: 100%;
+        color: #fff;
+        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+      }
+
+      .pose-hint__text {
+        font-size: var(--text-base);
+        font-weight: 600;
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      }
+
+      @keyframes pose-hint-in {
+        0% { opacity: 0; transform: translateY(12px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+
+      @keyframes pose-hint-out {
+        0% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; transform: translateY(-8px); }
+      }
     </style>
   </head>
 
@@ -472,6 +527,11 @@
             <div id="processing-overlay" class="processing-overlay" style="display:none;">
               <div class="processing-spinner"></div>
               <p class="processing-text">Analyzing your photos...</p>
+            </div>
+            <!-- Pose hint overlay -->
+            <div id="pose-hint" class="pose-hint" aria-live="polite" style="display:none;">
+              <div class="pose-hint__icon" id="pose-hint-icon"></div>
+              <div class="pose-hint__text" id="pose-hint-text"></div>
             </div>
           </div>
 
