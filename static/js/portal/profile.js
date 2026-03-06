@@ -194,10 +194,87 @@
     addCourseInput.focus();
   });
 
+  /* --- Course autocomplete --- */
+
+  var courseSuggestions = document.getElementById('course-suggestions');
+  var acActiveIndex = -1;
+  var acDebounceTimer = null;
+
+  function fetchCourseSuggestions(query) {
+    if (!query || query.length < 1) {
+      closeSuggestions();
+      return;
+    }
+    clearTimeout(acDebounceTimer);
+    acDebounceTimer = setTimeout(function () {
+      fetch('/api/portal/courses/search?q=' + encodeURIComponent(query))
+        .then(function (res) { return res.json(); })
+        .then(function (results) { renderSuggestions(results); })
+        .catch(function () { closeSuggestions(); });
+    }, 150);
+  }
+
+  function renderSuggestions(results) {
+    if (!results || results.length === 0) {
+      closeSuggestions();
+      return;
+    }
+    acActiveIndex = -1;
+    courseSuggestions.innerHTML = '';
+    results.forEach(function (code, i) {
+      var item = document.createElement('div');
+      item.className = 'course-autocomplete__item';
+      item.textContent = code;
+      item.dataset.index = i;
+      item.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        addCourseInput.value = code;
+        closeSuggestions();
+        addCourseInput.focus();
+      });
+      courseSuggestions.appendChild(item);
+    });
+    courseSuggestions.classList.add('open');
+  }
+
+  function closeSuggestions() {
+    courseSuggestions.classList.remove('open');
+    courseSuggestions.innerHTML = '';
+    acActiveIndex = -1;
+  }
+
+  addCourseInput.addEventListener('input', function () {
+    var val = this.value.trim().toUpperCase();
+    this.value = val;
+    fetchCourseSuggestions(val);
+  });
+
+  addCourseInput.addEventListener('blur', function () {
+    setTimeout(closeSuggestions, 150);
+  });
+
   addCourseInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      btnAddCourse.click();
+      var items = courseSuggestions.querySelectorAll('.course-autocomplete__item');
+      acActiveIndex = Math.min(items.length - 1, acActiveIndex + 1);
+      items.forEach(function (item, i) { item.classList.toggle('active', i === acActiveIndex); });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      var items2 = courseSuggestions.querySelectorAll('.course-autocomplete__item');
+      acActiveIndex = Math.max(-1, acActiveIndex - 1);
+      items2.forEach(function (item, i) { item.classList.toggle('active', i === acActiveIndex); });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      var items3 = courseSuggestions.querySelectorAll('.course-autocomplete__item');
+      if (acActiveIndex >= 0 && items3[acActiveIndex]) {
+        addCourseInput.value = items3[acActiveIndex].textContent;
+        closeSuggestions();
+      } else {
+        btnAddCourse.click();
+      }
+    } else if (e.key === 'Escape') {
+      closeSuggestions();
     }
   });
 

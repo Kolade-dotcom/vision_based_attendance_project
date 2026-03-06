@@ -483,10 +483,97 @@
 
   $('btn-add-course').addEventListener('click', addCourse);
 
+  /* --- Course autocomplete --- */
+
+  var suggestionsEl = $('course-suggestions');
+  var acActiveIndex = -1;
+  var acDebounceTimer = null;
+
+  function fetchCourseSuggestions(query) {
+    if (!query || query.length < 1) {
+      closeSuggestions();
+      return;
+    }
+    clearTimeout(acDebounceTimer);
+    acDebounceTimer = setTimeout(function () {
+      fetch('/api/portal/courses/search?q=' + encodeURIComponent(query))
+        .then(function (res) { return res.json(); })
+        .then(function (results) {
+          renderSuggestions(results);
+        })
+        .catch(function () { closeSuggestions(); });
+    }, 150);
+  }
+
+  function renderSuggestions(results) {
+    if (!results || results.length === 0) {
+      closeSuggestions();
+      return;
+    }
+    acActiveIndex = -1;
+    suggestionsEl.innerHTML = '';
+    results.forEach(function (code, i) {
+      var item = document.createElement('div');
+      item.className = 'course-autocomplete__item';
+      item.textContent = code;
+      item.dataset.index = i;
+      item.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        selectSuggestion(code);
+      });
+      suggestionsEl.appendChild(item);
+    });
+    suggestionsEl.classList.add('open');
+  }
+
+  function closeSuggestions() {
+    suggestionsEl.classList.remove('open');
+    suggestionsEl.innerHTML = '';
+    acActiveIndex = -1;
+  }
+
+  function selectSuggestion(code) {
+    courseInput.value = code;
+    closeSuggestions();
+    courseInput.focus();
+  }
+
+  function navigateSuggestions(direction) {
+    var items = suggestionsEl.querySelectorAll('.course-autocomplete__item');
+    if (items.length === 0) return;
+    acActiveIndex = Math.max(-1, Math.min(items.length - 1, acActiveIndex + direction));
+    items.forEach(function (item, i) {
+      item.classList.toggle('active', i === acActiveIndex);
+    });
+  }
+
+  courseInput.addEventListener('input', function () {
+    var val = this.value.trim().toUpperCase();
+    this.value = val;
+    fetchCourseSuggestions(val);
+  });
+
+  courseInput.addEventListener('blur', function () {
+    setTimeout(closeSuggestions, 150);
+  });
+
   courseInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      addCourse();
+      navigateSuggestions(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      navigateSuggestions(-1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      var items = suggestionsEl.querySelectorAll('.course-autocomplete__item');
+      if (acActiveIndex >= 0 && items[acActiveIndex]) {
+        selectSuggestion(items[acActiveIndex].textContent);
+      } else {
+        addCourse();
+      }
+    } else if (e.key === 'Escape') {
+      closeSuggestions();
     }
   });
 

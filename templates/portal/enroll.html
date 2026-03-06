@@ -568,14 +568,17 @@
           <div class="form-group">
             <label for="course-input" class="label">Courses</label>
             <div class="course-input-row">
-              <input
-                type="text"
-                id="course-input"
-                class="input"
-                placeholder="e.g. MTE411"
-                maxlength="6"
-                autocomplete="off"
-              />
+              <div class="course-autocomplete-wrap" style="flex:1;">
+                <input
+                  type="text"
+                  id="course-input"
+                  class="input"
+                  placeholder="e.g. MTE411"
+                  maxlength="6"
+                  autocomplete="off"
+                />
+                <div id="course-suggestions" class="course-autocomplete"></div>
+              </div>
               <button type="button" id="btn-add-course" class="btn btn-secondary">Add</button>
             </div>
             <div id="chip-list" class="chip-list"></div>

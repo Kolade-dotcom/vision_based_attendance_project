@@ -257,13 +257,17 @@
           <!-- Course add (shown in academic edit mode) -->
           <div id="course-add-form" style="display: none;">
             <div class="course-add">
-              <input
-                type="text"
-                id="add-course-input"
-                class="input"
-                placeholder="e.g. MTE411"
-                maxlength="6"
-              />
+              <div class="course-autocomplete-wrap" style="flex:1;">
+                <input
+                  type="text"
+                  id="add-course-input"
+                  class="input"
+                  placeholder="e.g. MTE411"
+                  maxlength="6"
+                  autocomplete="off"
+                />
+                <div id="course-suggestions" class="course-autocomplete"></div>
+              </div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-add-course">Add</button>
             </div>
           </div>

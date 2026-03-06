@@ -792,3 +792,44 @@ select.input {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* === Course autocomplete === */
+
+.course-autocomplete-wrap {
+  position: relative;
+}
+
+.course-autocomplete {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.course-autocomplete.open {
+  display: block;
+}
+
+.course-autocomplete__item {
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.course-autocomplete__item:hover,
+.course-autocomplete__item.active {
+  background-color: var(--brand-light);
+  color: var(--brand);
+}

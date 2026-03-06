@@ -211,13 +211,17 @@
     <div class="settings-card-title">Courses</div>
     <div class="chip-list" id="course-chips"></div>
     <div class="settings-field-row">
-      <input
-        type="text"
-        id="new-course-input"
-        class="input"
-        placeholder="e.g. MTE411"
-        maxlength="6"
-      />
+      <div class="course-autocomplete-wrap" style="flex:1;">
+        <input
+          type="text"
+          id="new-course-input"
+          class="input"
+          placeholder="e.g. MTE411"
+          maxlength="6"
+          autocomplete="off"
+        />
+        <div id="course-suggestions" class="course-autocomplete"></div>
+      </div>
       <button type="button" class="btn btn-primary btn-sm" id="add-course-btn">Add</button>
     </div>
   </div>
