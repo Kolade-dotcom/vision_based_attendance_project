@@ -8,6 +8,7 @@ from api.controllers.portal_controller import (
     update_profile_logic, update_face_logic, change_password_logic,
     complete_enrollment_logic, process_capture_logic
 )
+import db_helper
 
 portal_api_bp = Blueprint('portal_api', __name__, url_prefix='/api/portal')
 
@@ -63,3 +64,12 @@ def complete_enrollment():
 @student_login_required
 def process_capture():
     return process_capture_logic(request.json)
+
+@portal_api_bp.route('/courses/search', methods=['GET'])
+@student_login_required
+def search_courses():
+    q = request.args.get('q', '')
+    student = db_helper.get_student_by_matric(session['student_id'])
+    level = student.get('level') if student else None
+    results = db_helper.search_all_course_codes(q, student_level=level)
+    return jsonify(results)

@@ -75,3 +75,11 @@ def change_password():
         session["user_id"], generate_password_hash(data["new_password"])
     )
     return jsonify({"status": "success"})
+
+
+@dashboard_api_bp.route("/courses/search")
+@dashboard_login_required
+def search_courses():
+    q = request.args.get("q", "")
+    results = db_helper.search_all_course_codes(q)
+    return jsonify(results)

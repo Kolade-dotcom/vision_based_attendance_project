@@ -1590,6 +1590,69 @@ def get_recent_session_courses(user_id, limit=2):
         return [row["course_code"] for row in rows]
 
 
+def search_all_course_codes(query, student_level=None, limit=8):
+    """Search all unique course codes in the system by prefix."""
+    query = (query or '').strip().upper()
+    if not query:
+        return []
+
+    seen = set()
+    all_codes = []
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # 1. From students
+        cursor.execute(
+            "SELECT DISTINCT courses FROM students "
+            "WHERE courses IS NOT NULL AND courses != ''"
+        )
+        for row in cursor.fetchall():
+            try:
+                for c in json.loads(row['courses']):
+                    if c and c not in seen:
+                        all_codes.append(c)
+                        seen.add(c)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # 2. From class sessions
+        cursor.execute("SELECT DISTINCT course_code FROM class_sessions")
+        for row in cursor.fetchall():
+            c = row['course_code']
+            if c and c not in seen:
+                all_codes.append(c)
+                seen.add(c)
+
+        # 3. From lecturers
+        cursor.execute(
+            "SELECT courses FROM users WHERE courses IS NOT NULL AND courses != ''"
+        )
+        for row in cursor.fetchall():
+            try:
+                for c in json.loads(row['courses']):
+                    if c and c not in seen:
+                        all_codes.append(c)
+                        seen.add(c)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # Filter by prefix
+    matches = [c for c in all_codes if c.upper().startswith(query)]
+
+    # Sort: level-matching first (if student_level provided), then alphabetical
+    if student_level:
+        level_digit = str(student_level)[0] if student_level else None
+        def sort_key(code):
+            level_match = 0 if (len(code) >= 4 and code[3] == level_digit) else 1
+            return (level_match, code)
+        matches.sort(key=sort_key)
+    else:
+        matches.sort()
+
+    return matches[:limit]
+
+
 if __name__ == "__main__":
     # Test database operations
     logger.info("Testing database module...")
