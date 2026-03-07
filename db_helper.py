@@ -86,7 +86,27 @@ def _init_postgres():
         cursor.execute(schema)
         conn.commit()
 
+    # Run migrations for existing PostgreSQL databases
+    _migrate_postgres()
+
     logger.info("PostgreSQL database initialized successfully!")
+
+
+def _migrate_postgres():
+    """Run migrations for existing PostgreSQL databases."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # Add equivalent_courses column to class_sessions if missing
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'class_sessions' AND column_name = 'equivalent_courses'
+        """)
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE class_sessions ADD COLUMN equivalent_courses TEXT")
+            logger.info("Migration: Added equivalent_courses column to class_sessions (PostgreSQL)")
+
+        conn.commit()
 
 
 def _init_sqlite():
