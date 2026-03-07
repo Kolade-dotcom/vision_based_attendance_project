@@ -26,6 +26,7 @@ import requests
 
 from camera import get_camera, reset_camera, FaceDetector
 from esp32_bridge import get_esp32_bridge, reset_esp32_bridge
+from face_capture import GuidedFaceCapture
 
 try:
     import config
@@ -105,12 +106,16 @@ def start_capture(camera_source="auto", esp32_ip=None):
     """Start camera capture and face recognition loop."""
     global camera, detector, esp32, running
 
-    reset_camera()
     reset_esp32_bridge()
 
     logger.info(f"Starting capture with source={camera_source}, esp32_ip={esp32_ip}")
-    camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
-    camera.start()
+    # Reuse pre-warmed camera if available, otherwise create new
+    if camera is None or not (hasattr(camera, 'video_capture') and camera.video_capture is not None):
+        reset_camera()
+        camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
+        camera.start()
+    else:
+        logger.info("Reusing pre-warmed camera")
 
     esp32 = get_esp32_bridge(esp32_ip=esp32_ip)
     if esp32.connect():
@@ -128,6 +133,11 @@ def start_capture(camera_source="auto", esp32_ip=None):
     frame_interval = 1.0 / FRAME_RATE
     last_frame_time = 0
 
+    # Low-light detection state (debounced)
+    _last_low_light_state = None
+    _MIN_BRIGHTNESS = GuidedFaceCapture.MIN_BRIGHTNESS  # 40
+    _MAX_BRIGHTNESS = GuidedFaceCapture.MAX_BRIGHTNESS  # 220
+
     # Report actual camera source to dashboard
     from camera import _camera_source as actual_source
     sio.emit("worker:status", {"status": "capturing", "camera_source": actual_source or camera_source})
@@ -142,6 +152,32 @@ def start_capture(camera_source="auto", esp32_ip=None):
         # Mirror webcam
         if hasattr(camera, "camera_index"):
             frame = cv2.flip(frame, 1)
+
+        # Brightness check (debounced — only emit on state change)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mean_brightness = float(np.mean(gray))
+        is_low_light = mean_brightness < _MIN_BRIGHTNESS
+        is_too_bright = mean_brightness > _MAX_BRIGHTNESS
+
+        if is_low_light or is_too_bright:
+            if _last_low_light_state != "bad":
+                msg = "Too dark - move to a brighter area" if is_low_light else "Too bright - reduce lighting"
+                sio.emit("camera:low_light", {"is_low": True, "message": msg})
+                _last_low_light_state = "bad"
+            # Overlay warning on frame
+            cv2.putText(
+                frame,
+                "LOW LIGHT" if is_low_light else "TOO BRIGHT",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                (0, 0, 255),
+                2,
+            )
+        else:
+            if _last_low_light_state != "ok":
+                sio.emit("camera:low_light", {"is_low": False, "message": ""})
+                _last_low_light_state = "ok"
 
         # Face detection
         faces = detector.detect(frame)
@@ -240,6 +276,20 @@ def stop_capture():
     running = False
 
 
+def _prewarm_camera():
+    """Open camera immediately so first frame is fast when session starts."""
+    global camera
+    try:
+        settings = fetch_camera_settings(None)
+        camera_source = settings.get("camera_source", "auto")
+        esp32_ip = settings.get("esp32_ip")
+        camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
+        camera.start()
+        logger.info("Camera pre-warmed successfully")
+    except Exception as e:
+        logger.warning(f"Camera pre-warm failed (will retry on session start): {e}")
+
+
 # --- SocketIO event handlers ---
 
 
@@ -247,6 +297,8 @@ def stop_capture():
 def on_auth_ok():
     logger.info("Authenticated with server")
     sio.emit("worker:status", {"status": "idle"})
+    # Pre-warm camera so it's ready when session starts
+    _prewarm_camera()
 
 
 @sio.on("worker:auth_fail")
