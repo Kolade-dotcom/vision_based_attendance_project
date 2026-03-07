@@ -6,7 +6,7 @@ Supports PostgreSQL (via DATABASE_URL env var) and SQLite (fallback).
 
 import sqlite3
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 import os
 import json
@@ -217,7 +217,7 @@ def create_session(course_code, user_id, equivalent_courses=None):
         user_id: The ID of the lecturer creating the session
         equivalent_courses: Optional list of equivalent course codes
     """
-    start_time = datetime.now().isoformat()
+    start_time = datetime.now(timezone.utc).isoformat()
     equiv_json = json.dumps(equivalent_courses) if equivalent_courses else None
 
     with get_db_connection() as conn:
@@ -254,7 +254,7 @@ def create_session(course_code, user_id, equivalent_courses=None):
 
 def end_session(session_id):
     """End a specific session."""
-    end_time = datetime.now().isoformat()
+    end_time = datetime.now(timezone.utc).isoformat()
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -365,7 +365,7 @@ def update_user_settings(user_id, data):
     """Update user settings."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         if _USE_POSTGRES:
             upsert_sql = _q(
                 "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
@@ -571,7 +571,7 @@ def add_student(
                         status,
                         created_by,
                         enrolled_via_link_id,
-                        datetime.now().isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
                     ),
                 )
                 new_id = cursor.fetchone()["id"]
@@ -594,7 +594,7 @@ def add_student(
                         status,
                         created_by,
                         enrolled_via_link_id,
-                        datetime.now().isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
                     ),
                 )
                 conn.commit()
@@ -700,7 +700,10 @@ def record_attendance(student_id, status="present", course_code=None, level=None
             # After 15 minutes from session start, they are marked "late"
             if session_row["start_time"]:
                 session_start = datetime.fromisoformat(session_row["start_time"])
-                current_time = datetime.now()
+                # Ensure session_start is timezone-aware for comparison
+                if session_start.tzinfo is None:
+                    session_start = session_start.replace(tzinfo=timezone.utc)
+                current_time = datetime.now(timezone.utc)
                 # Use threshold from config or default to 15 minutes
                 threshold_minutes = config.LATE_THRESHOLD_MINUTES if config else 15
                 grace_period_seconds = threshold_minutes * 60
@@ -784,7 +787,7 @@ def record_attendance(student_id, status="present", course_code=None, level=None
                 """),
                 (
                     student_id,
-                    datetime.now().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                     status,
                     course_code,
                     level,
@@ -801,7 +804,7 @@ def record_attendance(student_id, status="present", course_code=None, level=None
                 """,
                 (
                     student_id,
-                    datetime.now().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                     status,
                     course_code,
                     level,
@@ -818,7 +821,7 @@ def record_attendance(student_id, status="present", course_code=None, level=None
             "status": status,
             "student_id": student_id,
             "student_name": student["name"],
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
 
@@ -850,7 +853,7 @@ def get_attendance_today(course_code=None, level=None):
     """
     Get all attendance records for today, optionally filtered.
     """
-    start_of_day = datetime.now().strftime("%Y-%m-%dT00:00:00")
+    start_of_day = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00+00:00")
 
     query = """
         SELECT a.student_id, s.name as student_name, a.timestamp, a.status, a.course_code, a.level
@@ -880,7 +883,7 @@ def get_statistics(course_code=None, level=None):
     """
     Get attendance statistics for today, optionally filtered.
     """
-    start_of_day = datetime.now().strftime("%Y-%m-%dT00:00:00")
+    start_of_day = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00+00:00")
 
     # Base WHERE clause
     where_clause = "WHERE timestamp >= ?"
@@ -1023,7 +1026,7 @@ def create_enrollment_link(
         dict: Created link details including token
     """
     token = secrets.token_urlsafe(24)  # 192 bits of entropy
-    expires_at = (datetime.now() + timedelta(hours=expires_hours)).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=expires_hours)).isoformat()
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -1095,7 +1098,9 @@ def validate_enrollment_link(token):
 
         # Check expiration
         expires_at = datetime.fromisoformat(link["expires_at"])
-        if datetime.now() > expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
             return None
 
         # Check usage limit
@@ -1216,7 +1221,7 @@ def approve_student(student_id, user_id):
             SET status = 'approved', created_by = ?, updated_at = ?
             WHERE student_id = ? AND status = 'pending'
             """),
-            (user_id, datetime.now().isoformat(), student_id),
+            (user_id, datetime.now(timezone.utc).isoformat(), student_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -1242,7 +1247,7 @@ def reject_student(student_id, user_id, reason=None):
             SET status = 'rejected', created_by = ?, rejection_reason = ?, updated_at = ?
             WHERE student_id = ? AND status = 'pending'
             """),
-            (user_id, reason, datetime.now().isoformat(), student_id),
+            (user_id, reason, datetime.now(timezone.utc).isoformat(), student_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -1281,7 +1286,7 @@ def create_student_account(matric_number, name, email, password_hash):
     """Create a student account (no face encoding yet)."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         if _USE_POSTGRES:
             cursor.execute(
                 _q("""INSERT INTO students (student_id, name, email, password_hash, status, is_enrolled, created_at)
@@ -1310,7 +1315,7 @@ def update_student_enrollment(student_id, face_encoding, level, courses):
             _q("""UPDATE students
                SET face_encoding = ?, level = ?, courses = ?, is_enrolled = 1, updated_at = ?
                WHERE student_id = ?"""),
-            (face_encoding, level, courses_json, datetime.now().isoformat(), student_id),
+            (face_encoding, level, courses_json, datetime.now(timezone.utc).isoformat(), student_id),
         )
         conn.commit()
 
@@ -1414,7 +1419,7 @@ def update_student_profile(student_id, name=None, email=None, level=None, course
             return False
 
         updates.append("updated_at = ?")
-        params.append(datetime.now().isoformat())
+        params.append(datetime.now(timezone.utc).isoformat())
         params.append(student_id)
 
         cursor.execute(
@@ -1431,7 +1436,7 @@ def update_student_face(student_id, face_encoding):
         cursor = conn.cursor()
         cursor.execute(
             _q("UPDATE students SET face_encoding = ?, updated_at = ? WHERE student_id = ?"),
-            (face_encoding, datetime.now().isoformat(), student_id),
+            (face_encoding, datetime.now(timezone.utc).isoformat(), student_id),
         )
         conn.commit()
 
@@ -1442,7 +1447,7 @@ def update_student_password(student_id, password_hash):
         cursor = conn.cursor()
         cursor.execute(
             _q("UPDATE students SET password_hash = ?, updated_at = ? WHERE student_id = ?"),
-            (password_hash, datetime.now().isoformat(), student_id),
+            (password_hash, datetime.now(timezone.utc).isoformat(), student_id),
         )
         conn.commit()
 

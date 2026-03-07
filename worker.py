@@ -277,15 +277,17 @@ def stop_capture():
 
 
 def _prewarm_camera():
-    """Open camera immediately so first frame is fast when session starts."""
+    """Open webcam immediately so first frame is fast when session starts.
+
+    Uses webcam directly (not "auto") to avoid a 10-second ESP32 timeout
+    that blocks the worker. The actual session will use the user's configured
+    source, but webcam pre-warm ensures fast startup for the common case.
+    """
     global camera
     try:
-        settings = fetch_camera_settings(None)
-        camera_source = settings.get("camera_source", "auto")
-        esp32_ip = settings.get("esp32_ip")
-        camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
+        camera = get_camera(source="webcam")
         camera.start()
-        logger.info("Camera pre-warmed successfully")
+        logger.info("Camera pre-warmed successfully (webcam)")
     except Exception as e:
         logger.warning(f"Camera pre-warm failed (will retry on session start): {e}")
 
@@ -331,9 +333,11 @@ def on_session_start(data):
     global active_session
     logger.info(f"Session start command: {data}")
     active_session = data
-    load_face_encodings()
 
-    # Fetch user's camera settings from the server
+    # Load face encodings in background (don't block camera start)
+    threading.Thread(target=load_face_encodings, daemon=True).start()
+
+    # Fetch user's camera settings, then start capture
     user_id = data.get("user_id")
     settings = fetch_camera_settings(user_id) if user_id else {}
     camera_source = settings.get("camera_source", "auto")
