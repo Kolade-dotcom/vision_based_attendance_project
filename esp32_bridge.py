@@ -350,12 +350,13 @@ class ESP32Bridge:
 _esp32_bridge_instance: Optional[ESP32Bridge] = None
 
 
-def get_esp32_bridge(force_new: bool = False) -> ESP32Bridge:
+def get_esp32_bridge(force_new: bool = False, esp32_ip: Optional[str] = None) -> ESP32Bridge:
     """
     Get or create the global ESP32Bridge instance.
 
     Args:
         force_new: If True, create a new instance even if one exists
+        esp32_ip: IP address of the ESP32-CAM (overrides config if provided)
 
     Returns:
         ESP32Bridge instance
@@ -367,7 +368,7 @@ def get_esp32_bridge(force_new: bool = False) -> ESP32Bridge:
         _esp32_bridge_instance = None
 
     if _esp32_bridge_instance is None:
-        _esp32_bridge_instance = ESP32Bridge()
+        _esp32_bridge_instance = ESP32Bridge(esp32_ip=esp32_ip)
 
     return _esp32_bridge_instance
 

@@ -99,9 +99,17 @@ def health_check():
 
 def gen_frames(user_id):
     """Video streaming generator function with face recognition and ESP32 integration."""
-    # Get camera and ESP32 bridge instances
-    camera = get_camera()
-    esp32 = get_esp32_bridge()
+    # Read camera settings from DB for this user
+    try:
+        settings = db_helper.get_user_settings(user_id)
+        camera_source = settings.get("camera_source", "auto")
+        esp32_ip = settings.get("esp32_ip")
+    except Exception:
+        camera_source = None
+        esp32_ip = None
+
+    camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
+    esp32 = get_esp32_bridge(esp32_ip=esp32_ip)
 
     # Connect to ESP32 and start heartbeat
     if esp32.connect():

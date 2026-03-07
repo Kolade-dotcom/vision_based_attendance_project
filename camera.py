@@ -440,58 +440,63 @@ _camera_instance = None
 _camera_source: Optional[str] = None
 
 
-def get_camera(source: Optional[str] = None, force_new: bool = False):
+def get_camera(source: Optional[str] = None, force_new: bool = False, esp32_ip: Optional[str] = None):
     """
     Get or create the global camera instance.
-    
+
     Supports multiple camera sources:
     - "esp32": Use ESP32-CAM MJPEG stream
     - "webcam": Use local webcam
     - "auto": Try ESP32-CAM first, fallback to webcam
     - None: Use configuration from config.py
-    
+
     Args:
         source: Camera source to use ("esp32", "webcam", "auto", or None for config)
         force_new: If True, create a new instance even if one exists
-    
+        esp32_ip: IP address of ESP32-CAM (overrides config if provided)
+
     Returns:
         Camera or ESP32Camera instance
     """
     global _camera_instance, _camera_source
-    
+
     # Determine source from config if not specified
     if source is None:
         if config is not None:
             source = config.CAMERA_SOURCE
         else:
             source = "webcam"  # Default fallback
-    
+
     # Return existing instance if source hasn't changed
     if not force_new and _camera_instance is not None and _camera_source == source:
         return _camera_instance
-    
+
     # Stop existing camera if switching sources
     if _camera_instance is not None:
         _camera_instance.stop()
         _camera_instance = None
-    
+
     _camera_source = source
-    
+
+    # Build ESP32 stream URL from ip or config
+    esp32_stream_port = config.ESP32_CAM_STREAM_PORT if config else 81
+    if esp32_ip:
+        esp32_stream_url = f"http://{esp32_ip}:{esp32_stream_port}/stream"
+    elif config:
+        esp32_stream_url = config.ESP32_CAM_STREAM_URL
+    else:
+        esp32_stream_url = "http://192.168.1.100:81/stream"
+
     if source == "esp32":
-        # Use ESP32-CAM stream
-        stream_url = config.ESP32_CAM_STREAM_URL if config else "http://192.168.1.100:81/stream"
-        _camera_instance = ESP32Camera(stream_url=stream_url)
-        
+        _camera_instance = ESP32Camera(stream_url=esp32_stream_url)
+
     elif source == "webcam":
-        # Use local webcam
         webcam_index = config.WEBCAM_INDEX if config else 0
         _camera_instance = Camera(camera_index=webcam_index)
-        
+
     elif source == "auto":
-        # Try ESP32-CAM first, fallback to webcam
-        stream_url = config.ESP32_CAM_STREAM_URL if config else "http://192.168.1.100:81/stream"
-        esp32_cam = ESP32Camera(stream_url=stream_url)
-        
+        esp32_cam = ESP32Camera(stream_url=esp32_stream_url)
+
         try:
             if esp32_cam.start():
                 print("Using ESP32-CAM stream")
@@ -505,7 +510,7 @@ def get_camera(source: Optional[str] = None, force_new: bool = False):
             _camera_instance = Camera(camera_index=webcam_index)
     else:
         raise ValueError(f"Unknown camera source: {source}")
-    
+
     return _camera_instance
 
 

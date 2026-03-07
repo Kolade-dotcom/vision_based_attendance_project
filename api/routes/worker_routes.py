@@ -35,3 +35,17 @@ def get_faces():
                 "face_encoding": base64.b64encode(encoding_data).decode("ascii"),
             })
     return jsonify(result)
+
+
+@worker_bp.route("/settings/<user_id>")
+def get_worker_settings(user_id):
+    """Return camera settings for the worker."""
+    auth_err = _check_worker_key()
+    if auth_err:
+        return auth_err
+
+    settings = db_helper.get_user_settings(user_id)
+    return jsonify({
+        "camera_source": settings.get("camera_source", "auto"),
+        "esp32_ip": settings.get("esp32_ip", "192.168.1.100"),
+    })

@@ -24,8 +24,8 @@ import face_recognition
 import socketio
 import requests
 
-from camera import get_camera, FaceDetector
-from esp32_bridge import get_esp32_bridge
+from camera import get_camera, reset_camera, FaceDetector
+from esp32_bridge import get_esp32_bridge, reset_esp32_bridge
 
 try:
     import config
@@ -86,14 +86,33 @@ def load_face_encodings():
         logger.error(f"Failed to load face encodings: {e}")
 
 
-def start_capture():
+def fetch_camera_settings(user_id):
+    """Fetch camera settings from the cloud API for this user."""
+    try:
+        resp = requests.get(
+            f"{SERVER_URL}/api/worker/settings/{user_id}",
+            headers={"X-Worker-Key": WORKER_API_KEY},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.warning(f"Failed to fetch camera settings: {e}, using defaults")
+        return {"camera_source": "auto", "esp32_ip": "192.168.1.100"}
+
+
+def start_capture(camera_source="auto", esp32_ip=None):
     """Start camera capture and face recognition loop."""
     global camera, detector, esp32, running
 
-    camera = get_camera()
+    reset_camera()
+    reset_esp32_bridge()
+
+    logger.info(f"Starting capture with source={camera_source}, esp32_ip={esp32_ip}")
+    camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
     camera.start()
 
-    esp32 = get_esp32_bridge()
+    esp32 = get_esp32_bridge(esp32_ip=esp32_ip)
     if esp32.connect():
         esp32.start_heartbeat()
         esp32.show_ready()
@@ -109,8 +128,10 @@ def start_capture():
     frame_interval = 1.0 / FRAME_RATE
     last_frame_time = 0
 
-    sio.emit("worker:status", {"status": "capturing"})
-    logger.info("Capture started")
+    # Report actual camera source to dashboard
+    from camera import _camera_source as actual_source
+    sio.emit("worker:status", {"status": "capturing", "camera_source": actual_source or camera_source})
+    logger.info(f"Capture started (actual source: {actual_source or camera_source})")
 
     while running:
         frame = camera.get_frame()
@@ -260,7 +281,17 @@ def on_session_start(data):
     active_session = data
     load_face_encodings()
 
-    t = threading.Thread(target=start_capture, daemon=True)
+    # Fetch user's camera settings from the server
+    user_id = data.get("user_id")
+    settings = fetch_camera_settings(user_id) if user_id else {}
+    camera_source = settings.get("camera_source", "auto")
+    esp32_ip = settings.get("esp32_ip")
+
+    t = threading.Thread(
+        target=start_capture,
+        args=(camera_source, esp32_ip),
+        daemon=True,
+    )
     t.start()
 
 
