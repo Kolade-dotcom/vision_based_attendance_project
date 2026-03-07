@@ -95,6 +95,17 @@
       loadAttendance();
       loadStats();
     });
+
+    socket.on("camera:low_light", function (data) {
+      if (dom.cameraWarning) {
+        if (data.is_low) {
+          dom.cameraWarningText.textContent = data.message || "Low light detected";
+          dom.cameraWarning.style.display = "block";
+        } else {
+          dom.cameraWarning.style.display = "none";
+        }
+      }
+    });
   }
 
   // --- Helpers ---
@@ -440,6 +451,9 @@
     if (ctx) ctx.clearRect(0, 0, dom.cameraFeed.width, dom.cameraFeed.height);
     dom.cameraFeed.style.display = "none";
     dom.cameraEmpty.style.display = "flex";
+
+    // Clear low-light warning
+    if (dom.cameraWarning) dom.cameraWarning.style.display = "none";
 
     // Reset loading state
     dom.cameraLoading.style.display = "none";
