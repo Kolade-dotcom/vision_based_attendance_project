@@ -35,7 +35,7 @@ The camera and WiFi libraries are included with the ESP32 board package.
 ### Components Needed
 
 - ESP32-CAM (AI-Thinker module)
-- USB-to-Serial programmer (FTDI or similar)
+- ESP32-CAM programming adapter (CH340 USB board)
 - 16x2 LCD with I2C backpack
 - **Active buzzer** (3.3V or 5V)
 - LED (any color) + 220Ω resistor
@@ -58,17 +58,15 @@ The camera and WiFi libraries are included with the ESP32 board package.
 | LED + (through 220Ω) | GPIO 13 |
 | LED - | GND |
 
-### Programmer Connection (for uploading)
+### Programming Adapter Connection (for uploading)
 
-| FTDI | ESP32-CAM |
-|------|-----------|
-| 5V | 5V |
-| GND | GND |
-| TX | U0R |
-| RX | U0T |
-| - | IO0 → GND (boot mode) |
+The ESP32-CAM programming adapter is a USB breakout board (usually CH340-based) that the ESP32-CAM plugs directly into. No loose wires needed for programming.
 
-**Important:** Connect GPIO 0 to GND only during upload, then disconnect for normal operation.
+1. Slide the ESP32-CAM into the adapter — match the pin headers (GND-to-GND side)
+2. Connect the adapter to your PC via USB cable
+3. The adapter provides power, serial connection, **and** handles boot mode automatically via the onboard IO0 button
+
+**Note:** Some adapters have a jumper or button labeled **IO0**. If your upload fails, hold the IO0 button while pressing RST, then release IO0 — this forces boot mode manually.
 
 ## Configuration
 
@@ -115,15 +113,15 @@ void loop() {
 
 ## Upload Instructions
 
-1. Connect ESP32-CAM to programmer (with GPIO 0 connected to GND)
-2. Open `esp32_cam_firmware.ino` in Arduino IDE
-3. Select board: **Tools > Board > ESP32 Arduino > AI Thinker ESP32-CAM**
-4. Select port: **Tools > Port > (your COM port)**
-5. Click **Upload** button
-6. Wait for "Connecting..." then press the RESET button on ESP32-CAM
-7. Wait for upload to complete
-8. **Disconnect GPIO 0 from GND**
-9. Press RESET button again
+1. Plug the ESP32-CAM into the programming adapter
+2. Connect the adapter to your PC via USB
+3. Open `esp32_cam_firmware.ino` in Arduino IDE
+4. Select board: **Tools > Board > ESP32 Arduino > AI Thinker ESP32-CAM**
+5. Select port: **Tools > Port > (your COM port)** — look for a CH340 port
+6. Click **Upload** button
+7. If upload stalls at "Connecting...", hold the **IO0** button on the adapter, press **RST**, then release IO0
+8. Wait for upload to complete
+9. Press **RST** button to start the firmware
 
 ## Testing
 
@@ -208,10 +206,10 @@ curl http://192.168.1.100/heartbeat
 - Try disabling static IP (set `USE_STATIC_IP false`)
 
 ### Upload fails
-- Ensure GPIO 0 is connected to GND
-- Press RESET when "Connecting..." appears
+- Hold **IO0** button, press **RST**, release IO0, then click Upload
 - Try a different USB cable
-- Check COM port selection
+- Install CH340 drivers if the COM port doesn't appear
+- Check COM port selection in Arduino IDE
 
 ## API Endpoints
 

@@ -146,6 +146,18 @@ LED                     ESP32-CAM
 | Buzzer | GPIO 12 | Output | Digital on/off (active buzzer) |
 | LED | GPIO 13 | Output | Status indicator |
 
+### Programming Adapter
+
+This project uses an **ESP32-CAM programming adapter** (CH340 USB board) instead of a standalone FTDI programmer. The ESP32-CAM plugs directly into the adapter — no loose wiring needed for uploading firmware.
+
+The adapter provides:
+- 5V power via USB
+- CH340 USB-to-Serial for programming
+- IO0 button for boot mode (hold IO0 + press RST to enter flash mode)
+- RST button for reset
+
+**Important:** Remove the ESP32-CAM from the programming adapter when running with peripheral components on a breadboard, as the adapter occupies the same pins. Alternatively, power the breadboard circuit separately and only use the adapter for firmware uploads.
+
 ### Pins to Avoid on ESP32-CAM
 
 | Pin | Reason |

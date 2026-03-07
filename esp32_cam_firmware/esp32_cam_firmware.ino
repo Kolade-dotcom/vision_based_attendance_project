@@ -7,12 +7,14 @@
  * - 16x2 LCD display (I2C)
  * - Active buzzer for audio feedback (on/off only, no frequency control)
  * - Status LED for connection indication
+ * - WiFi auto-reconnection
+ * - Non-blocking buzzer patterns
  *
  * Hardware Connections:
  * - LCD SDA: GPIO 14
  * - LCD SCL: GPIO 15
- * - Buzzer: GPIO 12 (active buzzer - connects to VCC via transistor if needed)
- * - LED: GPIO 13
+ * - Buzzer: GPIO 13 (active buzzer, active-LOW)
+ * - LED: GPIO 12
  */
 
 #include "esp_camera.h"
@@ -26,26 +28,31 @@
 // CONFIGURATION - Edit these values for your setup
 // =============================================================================
 
-// WiFi Credentials
+// WiFi Credentials (REQUIRED - change these!)
 const char *WIFI_SSID = "Redmi 10A";
 const char *WIFI_PASSWORD = "hotsc06e";
 
-// Static IP Configuration (recommended)
-// Set USE_STATIC_IP to false to use DHCP instead
-#define USE_STATIC_IP true
-IPAddress staticIP(192, 168, 1, 100);
-IPAddress gateway(192, 168, 1, 1);
+// Static IP Configuration
+// Set USE_STATIC_IP to false to use DHCP (recommended for phone hotspots)
+#define USE_STATIC_IP false
+IPAddress staticIP(192, 168, 43, 100);
+IPAddress gateway(192, 168, 43, 1);
 IPAddress subnet(255, 255, 255, 0);
 IPAddress dns(8, 8, 8, 8);
 
 // Hardware Pin Definitions
+// NOTE: Buzzer on GPIO 13, LED on GPIO 12 is intentional.
+// GPIO 12 is a strapping pin pulled LOW during boot — safe for LED
+// (just turns LED on briefly during boot) but causes active-LOW
+// buzzers to sound continuously during boot if connected there.
 #define LCD_SDA_PIN 14
 #define LCD_SCL_PIN 15
-#define BUZZER_PIN 12
-#define LED_PIN 13
+#define BUZZER_PIN 13
+#define LED_PIN 12
 
-// LCD I2C Address (common addresses: 0x27 or 0x3F)
+// LCD I2C Address (auto-detected in initLCD, fallback to 0x27)
 #define LCD_ADDRESS 0x27
+#define LCD_ADDRESS_ALT 0x3F
 #define LCD_COLS 16
 #define LCD_ROWS 2
 
@@ -53,8 +60,10 @@ IPAddress dns(8, 8, 8, 8);
 #define CAMERA_MODEL_AI_THINKER // Most common ESP32-CAM module
 
 // Timing Constants
-#define HEARTBEAT_TIMEOUT 10000    // 10 seconds without heartbeat = disconnected
-#define WIFI_CONNECT_TIMEOUT 20000 // 20 seconds to connect to WiFi
+#define HEARTBEAT_TIMEOUT 10000      // 10 seconds without heartbeat = disconnected
+#define WIFI_CONNECT_TIMEOUT 20000   // 20 seconds to connect to WiFi
+#define WIFI_RECONNECT_INTERVAL 5000 // 5 seconds between WiFi reconnect attempts
+#define STREAM_FRAME_DELAY 66        // ~15fps cap (matches OV2640 VGA output)
 
 // =============================================================================
 // CAMERA PIN DEFINITIONS (AI-Thinker ESP32-CAM)
@@ -101,8 +110,26 @@ unsigned long lastLEDUpdate = 0;
 unsigned long ledFlashStart = 0;
 bool ledOn = false;
 
-// Stream client tracking
-WiFiClient streamClient;
+// Buzzer State Machine (non-blocking)
+enum BuzzerPattern
+{
+    BUZZER_IDLE,
+    BUZZER_SUCCESS,
+    BUZZER_ERROR,
+    BUZZER_LATE,
+    BUZZER_SINGLE
+};
+
+BuzzerPattern currentBuzzerPattern = BUZZER_IDLE;
+unsigned long buzzerStepStart = 0;
+int buzzerStep = 0;
+
+// WiFi reconnection tracking
+unsigned long lastWiFiCheck = 0;
+bool wasConnected = false;
+
+// Heartbeat timeout tracking
+bool heartbeatLost = false;
 
 // =============================================================================
 // CAMERA INITIALIZATION
@@ -185,11 +212,37 @@ bool initCamera()
 // LCD FUNCTIONS
 // =============================================================================
 
+uint8_t detectedLCDAddress = LCD_ADDRESS;
+
 void initLCD()
 {
     // Initialize I2C with custom pins
     Wire.begin(LCD_SDA_PIN, LCD_SCL_PIN);
 
+    // Auto-detect LCD I2C address by scanning
+    Serial.println("Scanning for LCD on I2C...");
+    Wire.beginTransmission(LCD_ADDRESS);
+    if (Wire.endTransmission() == 0)
+    {
+        detectedLCDAddress = LCD_ADDRESS;
+        Serial.printf("LCD found at 0x%02X\n", LCD_ADDRESS);
+    }
+    else
+    {
+        Wire.beginTransmission(LCD_ADDRESS_ALT);
+        if (Wire.endTransmission() == 0)
+        {
+            detectedLCDAddress = LCD_ADDRESS_ALT;
+            Serial.printf("LCD found at 0x%02X\n", LCD_ADDRESS_ALT);
+        }
+        else
+        {
+            Serial.println("WARNING: LCD not found at 0x27 or 0x3F!");
+        }
+    }
+
+    // Re-initialize LCD with detected address
+    lcd = LiquidCrystal_I2C(detectedLCDAddress, LCD_COLS, LCD_ROWS);
     lcd.init();
     lcd.backlight();
     lcd.clear();
@@ -219,55 +272,132 @@ void clearLCD()
 }
 
 // =============================================================================
-// BUZZER FUNCTIONS (Active Buzzer - on/off only, no frequency control)
+// BUZZER FUNCTIONS (Non-blocking, active buzzer - on/off only)
 // Note: Many active buzzers are "active LOW" - they beep when pin is LOW
 // =============================================================================
 
 void initBuzzer()
 {
     pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(BUZZER_PIN, HIGH);  // HIGH = OFF for active-low buzzers
+    digitalWrite(BUZZER_PIN, HIGH); // HIGH = OFF for active-low buzzers
     Serial.println("Buzzer initialized");
 }
 
-// For active buzzer: simple beep with duration control
-void beep(int duration)
+void buzzerOn()
 {
-    digitalWrite(BUZZER_PIN, LOW);   // LOW = ON for active-low buzzers
-    delay(duration);
-    digitalWrite(BUZZER_PIN, HIGH);  // HIGH = OFF
+    digitalWrite(BUZZER_PIN, LOW); // LOW = ON for active-low buzzers
+}
+
+void buzzerOff()
+{
+    digitalWrite(BUZZER_PIN, HIGH); // HIGH = OFF
+}
+
+// Start a buzzer pattern (non-blocking)
+void startBuzzerPattern(BuzzerPattern pattern)
+{
+    currentBuzzerPattern = pattern;
+    buzzerStep = 0;
+    buzzerStepStart = millis();
+    buzzerOn();
+}
+
+// Non-blocking buzzer update - call every loop iteration
+// Each pattern is a sequence of (on_ms, off_ms) pairs
+void updateBuzzer()
+{
+    if (currentBuzzerPattern == BUZZER_IDLE)
+        return;
+
+    unsigned long elapsed = millis() - buzzerStepStart;
+
+    // Pattern definitions: arrays of durations in ms
+    // Even indices = buzzer ON, odd indices = buzzer OFF
+    // Terminated by 0
+    static const unsigned int successPattern[] = {100, 50, 100, 50, 150, 0};
+    static const unsigned int errorPattern[] = {300, 200, 300, 0};
+    static const unsigned int latePattern[] = {150, 100, 150, 0};
+    static const unsigned int singlePattern[] = {100, 0};
+
+    const unsigned int *pattern = NULL;
+
+    switch (currentBuzzerPattern)
+    {
+    case BUZZER_SUCCESS:
+        pattern = successPattern;
+        break;
+    case BUZZER_ERROR:
+        pattern = errorPattern;
+        break;
+    case BUZZER_LATE:
+        pattern = latePattern;
+        break;
+    case BUZZER_SINGLE:
+        pattern = singlePattern;
+        break;
+    default:
+        return;
+    }
+
+    unsigned int duration = pattern[buzzerStep];
+
+    // Pattern finished
+    if (duration == 0)
+    {
+        buzzerOff();
+        currentBuzzerPattern = BUZZER_IDLE;
+        return;
+    }
+
+    if (elapsed >= duration)
+    {
+        buzzerStep++;
+        buzzerStepStart = millis();
+
+        // Check if next step exists
+        if (pattern[buzzerStep] == 0)
+        {
+            buzzerOff();
+            currentBuzzerPattern = BUZZER_IDLE;
+            return;
+        }
+
+        // Even steps = ON, odd steps = OFF
+        if (buzzerStep % 2 == 0)
+        {
+            buzzerOn();
+        }
+        else
+        {
+            buzzerOff();
+        }
+    }
 }
 
 void playSuccessTone()
 {
-    // Three quick ascending-style beeps (shorter pauses = upbeat feel)
-    beep(100);
-    delay(50);
-    beep(100);
-    delay(50);
-    beep(150);
-
-    Serial.println("Success tone played");
+    startBuzzerPattern(BUZZER_SUCCESS);
+    Serial.println("Success tone started");
 }
 
 void playErrorTone()
 {
-    // Two long slow beeps (warning feel)
-    beep(300);
-    delay(200);
-    beep(300);
-
-    Serial.println("Error tone played");
+    startBuzzerPattern(BUZZER_ERROR);
+    Serial.println("Error tone started");
 }
 
 void playLateTone()
 {
-    // Two medium beeps (attention feel)
-    beep(150);
-    delay(100);
-    beep(150);
+    startBuzzerPattern(BUZZER_LATE);
+    Serial.println("Late tone started");
+}
 
-    Serial.println("Late tone played");
+// Blocking single beep (only used during startup before servers are running)
+void beepBlocking(int duration)
+{
+    buzzerOn();
+    delay(duration);
+    buzzerOff();
 }
 
 // =============================================================================
@@ -292,7 +422,12 @@ void updateLED()
         if (now - lastHeartbeat > HEARTBEAT_TIMEOUT)
         {
             currentLEDState = LED_FAST_BLINK;
-            Serial.println("Heartbeat timeout - lost connection");
+            if (!heartbeatLost)
+            {
+                heartbeatLost = true;
+                displayMessage("Server Lost", "Reconnecting...");
+                Serial.println("Heartbeat timeout - lost connection");
+            }
         }
     }
 
@@ -350,6 +485,103 @@ void flashLED()
 }
 
 // =============================================================================
+// WIFI CONNECTION & RECONNECTION
+// =============================================================================
+
+bool connectWiFi()
+{
+    Serial.println();
+    Serial.print("Connecting to WiFi: ");
+    Serial.println(WIFI_SSID);
+
+    currentLEDState = LED_SLOW_BLINK;
+    displayMessage("Connecting to", "WiFi...");
+
+    WiFi.mode(WIFI_STA);
+
+    if (USE_STATIC_IP)
+    {
+        if (!WiFi.config(staticIP, gateway, subnet, dns))
+        {
+            Serial.println("Static IP configuration failed");
+        }
+    }
+
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    unsigned long startTime = millis();
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        updateLED();
+        delay(100);
+
+        if (millis() - startTime > WIFI_CONNECT_TIMEOUT)
+        {
+            Serial.println("\nWiFi connection timeout!");
+            displayMessage("WiFi Failed!", "Check settings");
+            return false;
+        }
+
+        if ((millis() - startTime) % 1000 < 100)
+        {
+            Serial.print(".");
+        }
+    }
+
+    Serial.println();
+    Serial.print("Connected! IP: ");
+    Serial.println(WiFi.localIP());
+
+    currentLEDState = LED_FAST_BLINK;
+    wasConnected = true;
+
+    char ipStr[16];
+    WiFi.localIP().toString().toCharArray(ipStr, 16);
+    displayMessage("WiFi Connected!", ipStr);
+
+    return true;
+}
+
+// Check WiFi and reconnect if lost
+void checkWiFi()
+{
+    unsigned long now = millis();
+
+    // Only check periodically
+    if (now - lastWiFiCheck < WIFI_RECONNECT_INTERVAL)
+        return;
+    lastWiFiCheck = now;
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        if (!wasConnected)
+        {
+            // Just reconnected
+            wasConnected = true;
+            currentLEDState = LED_FAST_BLINK;
+            char ipStr[16];
+            WiFi.localIP().toString().toCharArray(ipStr, 16);
+            displayMessage("WiFi Restored!", ipStr);
+            Serial.println("WiFi reconnected!");
+        }
+        return;
+    }
+
+    // WiFi lost
+    if (wasConnected)
+    {
+        wasConnected = false;
+        currentLEDState = LED_SLOW_BLINK;
+        displayMessage("WiFi Lost!", "Reconnecting...");
+        Serial.println("WiFi connection lost, attempting reconnect...");
+    }
+
+    // Attempt reconnect (non-blocking - WiFi.begin returns immediately)
+    WiFi.disconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+// =============================================================================
 // HTTP HANDLERS - Control Server (Port 80)
 // =============================================================================
 
@@ -372,7 +604,7 @@ void handleRoot()
 
 void handleStatus()
 {
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<512> doc;
     doc["status"] = "ok";
     doc["device"] = "ESP32-CAM";
     doc["ip"] = WiFi.localIP().toString();
@@ -391,6 +623,7 @@ void handleHeartbeat()
 {
     lastHeartbeat = millis();
     currentLEDState = LED_SOLID;
+    heartbeatLost = false;
 
     StaticJsonDocument<64> doc;
     doc["status"] = "ok";
@@ -511,66 +744,9 @@ void handleStream()
 
         esp_camera_fb_return(fb);
 
-        // Small delay to control frame rate
-        delay(10);
+        // Cap at ~15fps to match OV2640 VGA output and save CPU
+        delay(STREAM_FRAME_DELAY);
     }
-}
-
-// =============================================================================
-// WIFI CONNECTION
-// =============================================================================
-
-bool connectWiFi()
-{
-    Serial.println();
-    Serial.print("Connecting to WiFi: ");
-    Serial.println(WIFI_SSID);
-
-    currentLEDState = LED_SLOW_BLINK;
-    displayMessage("Connecting to", "WiFi...");
-
-    WiFi.mode(WIFI_STA);
-
-    if (USE_STATIC_IP)
-    {
-        if (!WiFi.config(staticIP, gateway, subnet, dns))
-        {
-            Serial.println("Static IP configuration failed");
-        }
-    }
-
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    unsigned long startTime = millis();
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        updateLED();
-        delay(100);
-
-        if (millis() - startTime > WIFI_CONNECT_TIMEOUT)
-        {
-            Serial.println("\nWiFi connection timeout!");
-            displayMessage("WiFi Failed!", "Check settings");
-            return false;
-        }
-
-        if ((millis() - startTime) % 1000 < 100)
-        {
-            Serial.print(".");
-        }
-    }
-
-    Serial.println();
-    Serial.print("Connected! IP: ");
-    Serial.println(WiFi.localIP());
-
-    currentLEDState = LED_FAST_BLINK;
-
-    char ipStr[16];
-    WiFi.localIP().toString().toCharArray(ipStr, 16);
-    displayMessage("WiFi Connected!", ipStr);
-
-    return true;
 }
 
 // =============================================================================
@@ -625,8 +801,8 @@ void setup()
     initBuzzer();
     initLCD();
 
-    // Play startup beep
-    beep(100);
+    // Play startup beep (blocking is fine here, servers aren't running yet)
+    beepBlocking(100);
 
     // Initialize camera
     if (!initCamera())
@@ -664,8 +840,12 @@ void setup()
     Serial.println(":81/stream");
     Serial.println();
 
-    // Success startup tone
-    playSuccessTone();
+    // Success startup tone (blocking is fine here, just started)
+    beepBlocking(100);
+    delay(50);
+    beepBlocking(100);
+    delay(50);
+    beepBlocking(150);
 }
 
 // =============================================================================
@@ -678,8 +858,12 @@ void loop()
     server.handleClient();
     streamServer.handleClient();
 
-    // Update LED state
+    // Update hardware state machines
     updateLED();
+    updateBuzzer();
+
+    // Check WiFi and reconnect if lost
+    checkWiFi();
 
     // Small delay to prevent watchdog issues
     delay(1);
