@@ -115,6 +115,12 @@ def _init_sqlite():
                 )
                 logger.info("Migration: Added user_id column to class_sessions")
 
+            if "equivalent_courses" not in columns:
+                conn.execute(
+                    "ALTER TABLE class_sessions ADD COLUMN equivalent_courses TEXT"
+                )
+                logger.info("Migration: Added equivalent_courses column to class_sessions")
+
         # Check if students table needs migration for self-enrollment columns
         cursor.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='students'"
