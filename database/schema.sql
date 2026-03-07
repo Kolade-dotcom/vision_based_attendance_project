@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS attendance (
     FOREIGN KEY (session_id) REFERENCES class_sessions(id) ON DELETE CASCADE
 );
 
+-- Prevent duplicate attendance per student per session
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_unique_session_student
+    ON attendance(session_id, student_id) WHERE session_id IS NOT NULL;
+
 -- Create indexes for attendance queries
 CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_timestamp ON attendance(timestamp);

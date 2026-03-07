@@ -106,6 +106,12 @@ def _migrate_postgres():
             cursor.execute("ALTER TABLE class_sessions ADD COLUMN equivalent_courses TEXT")
             logger.info("Migration: Added equivalent_courses column to class_sessions (PostgreSQL)")
 
+        # Add unique index to prevent duplicate attendance per student per session
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_unique_session_student
+            ON attendance(session_id, student_id) WHERE session_id IS NOT NULL
+        """)
+
         conn.commit()
 
 

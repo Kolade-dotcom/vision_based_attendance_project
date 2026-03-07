@@ -57,6 +57,7 @@ known_face_names = []
 known_student_ids = []
 active_session = None
 running = False
+reported_students = set()  # Track students already reported this session
 
 
 def load_face_encodings():
@@ -212,19 +213,21 @@ def start_capture(camera_source="auto", esp32_ip=None):
                         name = known_face_names[best_match_index]
                         student_id = known_student_ids[best_match_index]
 
-                        # Report attendance to cloud
-                        sio.emit(
-                            "worker:attendance",
-                            {
-                                "student_id": student_id,
-                                "status": "present",
-                                "course_code": active_session.get("course_code"),
-                            },
-                        )
+                        # Report attendance to cloud (only once per student per session)
+                        if student_id not in reported_students:
+                            reported_students.add(student_id)
+                            sio.emit(
+                                "worker:attendance",
+                                {
+                                    "student_id": student_id,
+                                    "status": "present",
+                                    "course_code": active_session.get("course_code"),
+                                },
+                            )
+                            logger.info(f"Recognized: {name} ({student_id})")
 
-                        # ESP32 feedback
+                        # ESP32 feedback (always, so student gets confirmation)
                         esp32.signal_success(name, student_id)
-                        logger.info(f"Recognized: {name} ({student_id})")
                 else:
                     if config and config.ESP32_SIGNAL_UNKNOWN:
                         esp32.signal_error("Unknown Person")
@@ -333,6 +336,7 @@ def on_session_start(data):
     global active_session
     logger.info(f"Session start command: {data}")
     active_session = data
+    reported_students.clear()
 
     # Load face encodings in background (don't block camera start)
     threading.Thread(target=load_face_encodings, daemon=True).start()
@@ -356,6 +360,7 @@ def on_session_end(data):
     global active_session
     logger.info(f"Session end command: {data}")
     active_session = None
+    reported_students.clear()
     stop_capture()
 
 
