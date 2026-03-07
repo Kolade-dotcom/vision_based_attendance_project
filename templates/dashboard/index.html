@@ -415,6 +415,15 @@
   .camera-loading.error p {
     color: var(--danger, #ef4444);
   }
+  .equiv-input-group {
+    margin-top: 8px;
+  }
+  .equiv-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: block;
+  }
 </style>
 
 <!-- Header Bar -->
@@ -436,6 +445,15 @@
   <!-- Inactive state (default) -->
   <div class="session-strip-inactive" id="strip-inactive">
     <div class="session-select" id="session-course-select-container"></div>
+          <div class="equiv-input-group" id="equiv-input-group">
+            <label for="equiv-courses" class="equiv-label">Equivalent courses <span class="text-muted">(optional)</span></label>
+            <input
+              type="text"
+              id="equiv-courses"
+              class="input-field input-sm"
+              placeholder="e.g. MTE401, MEE301"
+            />
+          </div>
     <button type="button" class="btn btn-primary" id="btn-start-session">Start Session</button>
   </div>
   <!-- Active state (hidden by default) -->

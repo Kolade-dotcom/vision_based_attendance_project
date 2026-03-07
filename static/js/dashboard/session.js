@@ -410,6 +410,12 @@
     dom.stripActive.style.display = "flex";
     dom.activeCourseCode.textContent = escapeHtml(session.course_code || "");
 
+    // Clear and hide equiv input
+    var equivInput = document.getElementById("equiv-courses");
+    if (equivInput) equivInput.value = "";
+    var equivGroup = document.getElementById("equiv-input-group");
+    if (equivGroup) equivGroup.style.display = "none";
+
     // Hide quick start
     var quickStart = document.getElementById("quick-start");
     if (quickStart) quickStart.style.display = "none";
@@ -478,6 +484,10 @@
 
     stopElapsedTimer();
     stopAttendancePolling();
+
+    // Show equiv input again
+    var equivGroup = document.getElementById("equiv-input-group");
+    if (equivGroup) equivGroup.style.display = "block";
 
     // Show quick start again
     if (state.recentCourses && state.recentCourses.length > 0) {
@@ -729,10 +739,16 @@
     dom.btnStart.disabled = true;
     dom.btnStart.textContent = "Starting...";
 
+    var equivInput = document.getElementById("equiv-courses");
+    var equivalentCourses = equivInput ? equivInput.value.trim() : "";
+
     apiFetch("/api/sessions/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ course_code: courseCode }),
+      body: JSON.stringify({
+        course_code: courseCode,
+        equivalent_courses: equivalentCourses || undefined,
+      }),
     })
       .then(function (data) {
         showToast("Session started", "success");
