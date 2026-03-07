@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS class_sessions (
     start_time TEXT NOT NULL,
     end_time TEXT,
     is_active INTEGER DEFAULT 1,
+    equivalent_courses TEXT,        -- JSON array of equivalent course codes, e.g. '["MTE401","MEE301"]'
     created_at TEXT DEFAULT (NOW()::text),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -77,7 +78,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     student_id TEXT NOT NULL,
     session_id INTEGER,
     timestamp TEXT NOT NULL,
-    status TEXT DEFAULT 'present' CHECK(status IN ('present', 'late', 'absent')),
+    status TEXT DEFAULT 'present' CHECK(status IN ('present', 'late', 'absent', 'not_enrolled')),
     course_code TEXT,
     level TEXT,
     FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,

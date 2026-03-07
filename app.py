@@ -160,6 +160,16 @@ def gen_frames(user_id):
         if hasattr(camera, "camera_index"):
             frame = cv2.flip(frame, 1)
 
+        # Brightness warning overlay
+        gray_check = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mean_brightness = np.mean(gray_check)
+        if mean_brightness < 40:
+            cv2.putText(frame, "LOW LIGHT - improve lighting", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        elif mean_brightness > 220:
+            cv2.putText(frame, "TOO BRIGHT - reduce lighting", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
         # Detect faces using advanced HOG-based detector with tracking
         faces = detector.detect(frame)
 

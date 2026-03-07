@@ -4,20 +4,27 @@ import db_helper
 def start_session_logic():
     """
     Start a new session for the logged-in user.
-    Expects JSON: { "course_code": "..." }
+    Expects JSON: { "course_code": "...", "equivalent_courses": "MTE401, MEE301" (optional) }
     """
     try:
         user_id = flask_session.get('user_id')
         if not user_id:
             return jsonify({'error': 'Not authenticated'}), 401
-            
+
         data = request.get_json()
         course_code = data.get('course_code')
-        
+
         if not course_code:
             return jsonify({'error': 'Missing course_code'}), 400
-            
-        session_id = db_helper.create_session(course_code, user_id)
+
+        # Parse optional equivalent courses
+        equivalent_courses = data.get('equivalent_courses')
+        if equivalent_courses and isinstance(equivalent_courses, str):
+            equivalent_courses = [c.strip().upper() for c in equivalent_courses.split(',') if c.strip()]
+        if not equivalent_courses:
+            equivalent_courses = None
+
+        session_id = db_helper.create_session(course_code, user_id, equivalent_courses=equivalent_courses)
 
         from app import notify_worker
         worker_notified = notify_worker("session:start", {

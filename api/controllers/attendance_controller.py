@@ -30,10 +30,40 @@ def get_statistics_logic():
     try:
         course_code = request.args.get('course')
         level = request.args.get('level')
-        
+
         stats = db_helper.get_statistics(course_code=course_code, level=level)
-        
+
         return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def approve_attendance_logic(attendance_id):
+    """Approve a not_enrolled attendance record (change to present)."""
+    try:
+        user_id = flask_session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        success = db_helper.update_attendance_status(attendance_id, 'present')
+        if success:
+            return jsonify({'message': 'Attendance approved'}), 200
+        return jsonify({'error': 'Record not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def dismiss_attendance_logic(attendance_id):
+    """Dismiss (delete) a not_enrolled attendance record."""
+    try:
+        user_id = flask_session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+
+        success = db_helper.delete_attendance(attendance_id)
+        if success:
+            return jsonify({'message': 'Attendance dismissed'}), 200
+        return jsonify({'error': 'Record not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
