@@ -579,23 +579,26 @@
       var tr = document.createElement("tr");
       if (isNew) tr.className = "attendance-row-new";
 
-      var pillClass = rec.status === "late" ? "pill-late" : "pill-present";
+      var statusText = rec.status || "present";
+      var pillClass = "pill-present";
+      if (statusText === "late") pillClass = "pill-late";
+      if (statusText === "not_enrolled") pillClass = "pill-not-enrolled";
+
+      var actionsHtml = "";
+      if (statusText === "not_enrolled" && rec.id) {
+        actionsHtml =
+          '<td><button class="btn btn-ghost btn-sm btn-approve" data-approve="' + rec.id + '">Approve</button> ' +
+          '<button class="btn btn-ghost btn-sm btn-danger-ghost" data-dismiss-att="' + rec.id + '">Dismiss</button></td>';
+      } else {
+        actionsHtml = "<td></td>";
+      }
 
       tr.innerHTML =
-        "<td>" +
-        escapeHtml(formatTime(rec.timestamp)) +
-        "</td>" +
-        '<td class="font-mono">' +
-        escapeHtml(rec.student_id || "") +
-        "</td>" +
-        "<td>" +
-        escapeHtml(rec.student_name || "") +
-        "</td>" +
-        '<td><span class="pill ' +
-        pillClass +
-        '">' +
-        escapeHtml(rec.status || "") +
-        "</span></td>";
+        "<td>" + escapeHtml(formatTime(rec.timestamp)) + "</td>" +
+        '<td class="font-mono">' + escapeHtml(rec.student_id || "") + "</td>" +
+        "<td>" + escapeHtml(rec.student_name || "") + "</td>" +
+        '<td><span class="pill ' + pillClass + '">' + escapeHtml(statusText) + "</span></td>" +
+        actionsHtml;
       fragment.appendChild(tr);
     }
 
@@ -619,12 +622,21 @@
     if (statusText === "late") statusClass = "pill-late";
     if (statusText === "not_enrolled") statusClass = "pill-not-enrolled";
 
+    var actionsHtml = "";
+    if (statusText === "not_enrolled" && rec.id) {
+      actionsHtml =
+        '<td><button class="btn btn-ghost btn-sm btn-approve" data-approve="' + rec.id + '">Approve</button> ' +
+        '<button class="btn btn-ghost btn-sm btn-danger-ghost" data-dismiss-att="' + rec.id + '">Dismiss</button></td>';
+    } else {
+      actionsHtml = "<td></td>";
+    }
+
     tr.innerHTML =
       "<td>" + escapeHtml(formatTime(rec.timestamp || new Date().toISOString())) + "</td>" +
       '<td class="font-mono">' + escapeHtml(rec.student_id || "") + "</td>" +
       "<td>" + escapeHtml(rec.student_name || "") + "</td>" +
       '<td><span class="pill ' + statusClass + '">' + escapeHtml(statusText) + "</span></td>" +
-      "<td></td>";
+      actionsHtml;
 
     dom.attendanceTbody.appendChild(tr);
     state.knownAttendanceIds.add(key);
@@ -885,6 +897,38 @@
     if (deleteBtn) {
       state.deleteTargetId = deleteBtn.getAttribute("data-delete");
       openModal("modal-delete-session");
+    }
+  });
+
+  // Delegated clicks on attendance table (approve / dismiss)
+  dom.attendanceTbody.addEventListener("click", function (e) {
+    var approveBtn = e.target.closest("[data-approve]");
+    if (approveBtn) {
+      var attId = approveBtn.getAttribute("data-approve");
+      apiFetch("/api/attendance/" + attId + "/approve", { method: "PATCH" })
+        .then(function () {
+          showToast("Attendance approved", "success");
+          loadAttendance();
+          loadStats();
+        })
+        .catch(function (err) {
+          showToast(err.message || "Failed to approve", "error");
+        });
+      return;
+    }
+
+    var dismissBtn = e.target.closest("[data-dismiss-att]");
+    if (dismissBtn) {
+      var attId = dismissBtn.getAttribute("data-dismiss-att");
+      apiFetch("/api/attendance/" + attId, { method: "DELETE" })
+        .then(function () {
+          showToast("Attendance dismissed", "success");
+          loadAttendance();
+          loadStats();
+        })
+        .catch(function (err) {
+          showToast(err.message || "Failed to dismiss", "error");
+        });
     }
   });
 
