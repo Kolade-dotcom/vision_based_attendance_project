@@ -29,6 +29,7 @@
     sessionElapsed: document.getElementById("session-elapsed"),
     sessionStudentCount: document.getElementById("session-student-count"),
     cameraFeed: document.getElementById("camera-feed"),
+    cameraLoading: document.getElementById("camera-loading"),
     cameraEmpty: document.getElementById("camera-empty"),
     attendanceTbody: document.getElementById("attendance-tbody"),
     attendanceEmpty: document.getElementById("attendance-empty"),
@@ -44,6 +45,8 @@
     btnConfirmEnd: document.getElementById("btn-confirm-end"),
     modalDelete: document.getElementById("modal-delete-session"),
     btnConfirmDelete: document.getElementById("btn-confirm-delete"),
+    cameraWarning: document.getElementById("camera-warning"),
+    cameraWarningText: document.getElementById("camera-warning-text"),
   };
 
   // --- SocketIO ---
@@ -65,6 +68,15 @@
   if (socket) {
     socket.on("camera:frame", function (data) {
       if (state.activeSession) {
+        // Hide loading, show canvas on first frame
+        if (dom.cameraLoading && dom.cameraLoading.style.display !== "none") {
+          dom.cameraLoading.style.display = "none";
+          dom.cameraFeed.style.display = "block";
+          if (state.cameraTimeout) {
+            clearTimeout(state.cameraTimeout);
+            state.cameraTimeout = null;
+          }
+        }
         renderFrame(data.frame);
       }
     });
@@ -76,7 +88,10 @@
       }
     });
 
-    socket.on("attendance:new", function () {
+    socket.on("attendance:new", function (data) {
+      if (data && data.student_id) {
+        appendAttendanceRow(data);
+      }
       loadAttendance();
       loadStats();
     });
@@ -388,9 +403,19 @@
     var quickStart = document.getElementById("quick-start");
     if (quickStart) quickStart.style.display = "none";
 
-    // Camera — show canvas
-    dom.cameraFeed.style.display = "block";
+    // Camera — show loading state (canvas hidden until first frame)
+    dom.cameraFeed.style.display = "none";
+    dom.cameraLoading.style.display = "flex";
     dom.cameraEmpty.style.display = "none";
+
+    // Timeout — if no frame in 10s, show error
+    state.cameraTimeout = setTimeout(function () {
+      if (dom.cameraLoading.style.display !== "none") {
+        dom.cameraLoading.classList.add("error");
+        dom.cameraLoading.querySelector("p").textContent =
+          "Camera not responding. Check your worker connection.";
+      }
+    }, 10000);
 
     // Stats
     dom.statsSkeleton.style.display = "none";
@@ -415,6 +440,15 @@
     if (ctx) ctx.clearRect(0, 0, dom.cameraFeed.width, dom.cameraFeed.height);
     dom.cameraFeed.style.display = "none";
     dom.cameraEmpty.style.display = "flex";
+
+    // Reset loading state
+    dom.cameraLoading.style.display = "none";
+    dom.cameraLoading.classList.remove("error");
+    dom.cameraLoading.querySelector("p").textContent = "Connecting to camera...";
+    if (state.cameraTimeout) {
+      clearTimeout(state.cameraTimeout);
+      state.cameraTimeout = null;
+    }
 
     // Stats
     dom.statsSkeleton.style.display = "none";
@@ -462,7 +496,7 @@
   function startAttendancePolling() {
     stopAttendancePolling();
     loadAttendance();
-    state.pollingTimer = setInterval(loadAttendance, 3000);
+    state.pollingTimer = setInterval(loadAttendance, 1000);
   }
 
   function stopAttendancePolling() {
@@ -545,6 +579,31 @@
     dom.attendanceTbody.appendChild(fragment);
     state.knownAttendanceIds = newIds;
     state.attendanceRecords = records;
+  }
+
+  function appendAttendanceRow(rec) {
+    if (!rec || !rec.student_id) return;
+    var key = rec.student_id + "|" + (rec.timestamp || new Date().toISOString());
+    if (state.knownAttendanceIds.has(key)) return;
+
+    dom.attendanceEmpty.style.display = "none";
+    var tr = document.createElement("tr");
+    tr.className = "attendance-row-new";
+
+    var statusClass = "pill-present";
+    var statusText = rec.status || "present";
+    if (statusText === "late") statusClass = "pill-late";
+    if (statusText === "not_enrolled") statusClass = "pill-not-enrolled";
+
+    tr.innerHTML =
+      "<td>" + escapeHtml(formatTime(rec.timestamp || new Date().toISOString())) + "</td>" +
+      '<td class="font-mono">' + escapeHtml(rec.student_id || "") + "</td>" +
+      "<td>" + escapeHtml(rec.student_name || "") + "</td>" +
+      '<td><span class="pill ' + statusClass + '">' + escapeHtml(statusText) + "</span></td>" +
+      "<td></td>";
+
+    dom.attendanceTbody.appendChild(tr);
+    state.knownAttendanceIds.add(key);
   }
 
   function updateStudentCount(count) {
