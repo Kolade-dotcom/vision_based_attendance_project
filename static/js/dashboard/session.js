@@ -299,31 +299,124 @@
     state.recentCourses = recentCourses;
   }
 
+  // --- Equivalent Courses (localStorage) ---
+
+  var EQUIV_STORAGE_KEY = "equiv_courses";
+
+  function getSavedEquiv(courseCode) {
+    try {
+      var data = JSON.parse(localStorage.getItem(EQUIV_STORAGE_KEY) || "{}");
+      return data[courseCode] || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function saveEquiv(courseCode, equiv) {
+    try {
+      var data = JSON.parse(localStorage.getItem(EQUIV_STORAGE_KEY) || "{}");
+      if (equiv) {
+        data[courseCode] = equiv;
+      } else {
+        delete data[courseCode];
+      }
+      localStorage.setItem(EQUIV_STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      // localStorage unavailable
+    }
+  }
+
+  function beginSession(courseCode, equivalentCourses) {
+    return apiFetch("/api/sessions/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        course_code: courseCode,
+        equivalent_courses: equivalentCourses || undefined,
+      }),
+    }).then(function () {
+      // Save equiv for this course if provided
+      if (equivalentCourses) {
+        saveEquiv(courseCode, equivalentCourses);
+      }
+      showToast("Session started", "success");
+      checkActiveSession();
+      loadHistory();
+    });
+  }
+
+  function showEquivModal(courseCode, onComplete) {
+    var input = document.getElementById("equiv-courses-input");
+    var hint = document.getElementById("equiv-remembered-hint");
+    var btnSkip = document.getElementById("btn-equiv-skip");
+    var btnStart = document.getElementById("btn-equiv-start");
+
+    // Pre-fill with saved value
+    var saved = getSavedEquiv(courseCode);
+    input.value = saved;
+    if (saved) {
+      hint.textContent = "Remembered from last session";
+      hint.style.display = "block";
+    } else {
+      hint.style.display = "none";
+    }
+
+    function cleanup() {
+      btnSkip.removeEventListener("click", onSkip);
+      btnStart.removeEventListener("click", onStart);
+      closeModal("modal-equiv-courses");
+    }
+
+    function onSkip() {
+      cleanup();
+      onComplete("");
+    }
+
+    function onStart() {
+      var val = input.value.trim();
+      cleanup();
+      onComplete(val);
+    }
+
+    btnSkip.addEventListener("click", onSkip);
+    btnStart.addEventListener("click", onStart);
+    openModal("modal-equiv-courses");
+    input.focus();
+  }
+
+  function startWithCourse(courseCode, triggerBtn, originalLabel) {
+    var saved = getSavedEquiv(courseCode);
+
+    function doStart(equiv) {
+      if (triggerBtn) {
+        triggerBtn.disabled = true;
+        triggerBtn.textContent = "Starting...";
+      }
+      beginSession(courseCode, equiv)
+        .catch(function (err) {
+          showToast(err.message || "Failed to start session", "error");
+        })
+        .finally(function () {
+          if (triggerBtn) {
+            triggerBtn.disabled = false;
+            triggerBtn.textContent = originalLabel;
+          }
+        });
+    }
+
+    if (saved) {
+      // Has remembered equiv — start immediately
+      doStart(saved);
+    } else {
+      // No saved equiv — show modal
+      showEquivModal(courseCode, doStart);
+    }
+  }
+
   function onQuickStartClick(e) {
     var courseCode = e.currentTarget.getAttribute("data-course");
     if (!courseCode || state.activeSession) return;
-
-    var btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = "Starting...";
-
-    apiFetch("/api/sessions/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ course_code: courseCode }),
-    })
-      .then(function () {
-        showToast("Session started", "success");
-        checkActiveSession();
-        loadHistory();
-      })
-      .catch(function (err) {
-        showToast(err.message || "Failed to start session", "error");
-      })
-      .finally(function () {
-        btn.disabled = false;
-        btn.textContent = formatCourseCode(courseCode);
-      });
+    startWithCourse(courseCode, e.currentTarget, formatCourseCode(courseCode));
   }
 
   function renderCourseSelector(courses) {
@@ -410,12 +503,6 @@
     dom.stripActive.style.display = "flex";
     dom.activeCourseCode.textContent = escapeHtml(session.course_code || "");
 
-    // Clear and hide equiv input
-    var equivInput = document.getElementById("equiv-courses");
-    if (equivInput) equivInput.value = "";
-    var equivGroup = document.getElementById("equiv-input-group");
-    if (equivGroup) equivGroup.style.display = "none";
-
     // Hide quick start
     var quickStart = document.getElementById("quick-start");
     if (quickStart) quickStart.style.display = "none";
@@ -484,10 +571,6 @@
 
     stopElapsedTimer();
     stopAttendancePolling();
-
-    // Show equiv input again
-    var equivGroup = document.getElementById("equiv-input-group");
-    if (equivGroup) equivGroup.style.display = "block";
 
     // Show quick start again
     if (state.recentCourses && state.recentCourses.length > 0) {
@@ -747,33 +830,7 @@
       showToast("Select a course first", "warning");
       return;
     }
-
-    dom.btnStart.disabled = true;
-    dom.btnStart.textContent = "Starting...";
-
-    var equivInput = document.getElementById("equiv-courses");
-    var equivalentCourses = equivInput ? equivInput.value.trim() : "";
-
-    apiFetch("/api/sessions/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        course_code: courseCode,
-        equivalent_courses: equivalentCourses || undefined,
-      }),
-    })
-      .then(function (data) {
-        showToast("Session started", "success");
-        checkActiveSession();
-        loadHistory();
-      })
-      .catch(function (err) {
-        showToast(err.message || "Failed to start session", "error");
-      })
-      .finally(function () {
-        dom.btnStart.disabled = false;
-        dom.btnStart.textContent = "Start Session";
-      });
+    startWithCourse(courseCode, dom.btnStart, "Start Session");
   }
 
   function endSession() {

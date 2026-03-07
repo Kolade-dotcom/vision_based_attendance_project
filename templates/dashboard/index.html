@@ -422,14 +422,25 @@
   .btn-approve {
     color: var(--primary) !important;
   }
-  .equiv-input-group {
-    margin-top: 8px;
+  .modal-equiv-info {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-4);
+    line-height: 1.5;
   }
-  .equiv-label {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 4px;
+  .modal-equiv-label {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-2);
     display: block;
+  }
+  .modal-equiv-input {
+    margin-bottom: var(--space-5);
+  }
+  .modal-equiv-remembered {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
   }
 </style>
 
@@ -452,15 +463,6 @@
   <!-- Inactive state (default) -->
   <div class="session-strip-inactive" id="strip-inactive">
     <div class="session-select" id="session-course-select-container"></div>
-          <div class="equiv-input-group" id="equiv-input-group">
-            <label for="equiv-courses" class="equiv-label">Equivalent courses <span class="text-muted">(optional)</span></label>
-            <input
-              type="text"
-              id="equiv-courses"
-              class="input-field input-sm"
-              placeholder="e.g. MTE401, MEE301"
-            />
-          </div>
     <button type="button" class="btn btn-primary" id="btn-start-session">Start Session</button>
   </div>
   <!-- Active state (hidden by default) -->
@@ -608,6 +610,31 @@
     </div>
   </div>
 </section>
+
+<!-- Equivalent Courses Modal -->
+<div class="modal-backdrop" id="modal-equiv-courses" role="dialog" aria-modal="true" aria-labelledby="modal-equiv-title">
+  <div class="modal-card">
+    <h4 id="modal-equiv-title">Equivalent Course Codes</h4>
+    <p class="modal-equiv-info">
+      Some courses have different codes across departments (e.g. MEE401 and MTE401 are the same course).
+      Add equivalent codes so students enrolled in those courses are also marked present.
+    </p>
+    <label for="equiv-courses-input" class="modal-equiv-label">Equivalent course codes</label>
+    <div class="modal-equiv-input">
+      <input
+        type="text"
+        id="equiv-courses-input"
+        class="input"
+        placeholder="e.g. MTE401, MEE301"
+      />
+      <div class="modal-equiv-remembered" id="equiv-remembered-hint" style="display: none;"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="btn-equiv-skip">Skip</button>
+      <button type="button" class="btn btn-primary" id="btn-equiv-start">Start Session</button>
+    </div>
+  </div>
+</div>
 
 <!-- End Session Modal -->
 <div class="modal-backdrop" id="modal-end-session" role="dialog" aria-modal="true" aria-labelledby="modal-end-title">
