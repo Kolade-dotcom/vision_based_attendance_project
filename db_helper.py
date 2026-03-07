@@ -187,7 +187,7 @@ def init_database():
         _init_sqlite()
 
 
-def create_session(course_code, user_id):
+def create_session(course_code, user_id, equivalent_courses=None):
     """
     Start a new class session.
     Ensures only one active session per user exists.
@@ -195,8 +195,10 @@ def create_session(course_code, user_id):
     Args:
         course_code: The course code for this session
         user_id: The ID of the lecturer creating the session
+        equivalent_courses: Optional list of equivalent course codes
     """
     start_time = datetime.now().isoformat()
+    equiv_json = json.dumps(equivalent_courses) if equivalent_courses else None
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -210,20 +212,20 @@ def create_session(course_code, user_id):
         if _USE_POSTGRES:
             cursor.execute(
                 _q("""
-                INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active)
-                VALUES (?, ?, ?, ?, 1) RETURNING id
+                INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active, equivalent_courses)
+                VALUES (?, ?, ?, ?, 1, ?) RETURNING id
                 """),
-                (user_id, course_code, start_time, start_time),
+                (user_id, course_code, start_time, start_time, equiv_json),
             )
             new_id = cursor.fetchone()["id"]
             conn.commit()
         else:
             cursor.execute(
                 """
-                INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active)
-                VALUES (?, ?, ?, ?, 1)
+                INSERT INTO class_sessions (user_id, course_code, scheduled_start, start_time, is_active, equivalent_courses)
+                VALUES (?, ?, ?, ?, 1, ?)
                 """,
-                (user_id, course_code, start_time, start_time),
+                (user_id, course_code, start_time, start_time, equiv_json),
             )
             conn.commit()
             new_id = cursor.lastrowid
@@ -704,19 +706,33 @@ def record_attendance(student_id, status="present", course_code=None, level=None
             f"record_attendance - DB lookup for ID '{student_id}' found student: '{student['name']}'"
         )
 
-        # Check if student is enrolled in this course
+        # Check if student is enrolled in this course (or equivalent courses)
         if course_code and student["courses"]:
             try:
                 enrolled_courses = json.loads(student["courses"])
-                if course_code not in enrolled_courses:
-                    logger.info(
-                        f"Student {student_id} is not enrolled in {course_code}. Courses: {enrolled_courses}. Skipping attendance."
+                # Build set of accepted courses: session course + equivalents
+                accepted_courses = {course_code}
+                if session_id:
+                    cursor.execute(
+                        _q("SELECT equivalent_courses FROM class_sessions WHERE id = ?"),
+                        (session_id,),
                     )
-                    return None
+                    session_row_eq = cursor.fetchone()
+                    if session_row_eq and session_row_eq["equivalent_courses"]:
+                        try:
+                            equiv = json.loads(session_row_eq["equivalent_courses"])
+                            accepted_courses.update(equiv)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
+                if not any(c in accepted_courses for c in enrolled_courses):
+                    logger.info(
+                        f"Student {student_id} not enrolled in {course_code} or equivalents {accepted_courses}. "
+                        f"Courses: {enrolled_courses}. Recording as not_enrolled."
+                    )
+                    status = "not_enrolled"
             except (json.JSONDecodeError, TypeError):
-                # If courses is invalid JSON, skip validation
                 logger.warning(f"Invalid courses JSON for student {student_id}")
-                pass
 
         # If level is not passed, use student's level
         if not level and student["level"]:
@@ -777,7 +793,37 @@ def record_attendance(student_id, status="present", course_code=None, level=None
         logger.debug(
             f"Successfully inserted attendance for {student_id} in session {session_id}"
         )
-        return {"id": new_id, "status": status, "student_id": student_id}
+        return {
+            "id": new_id,
+            "status": status,
+            "student_id": student_id,
+            "student_name": student["name"],
+            "timestamp": datetime.now().isoformat(),
+        }
+
+
+def update_attendance_status(attendance_id, new_status):
+    """Update the status of an attendance record (e.g., approve not_enrolled -> present)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            _q("UPDATE attendance SET status = ? WHERE id = ?"),
+            (new_status, attendance_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def delete_attendance(attendance_id):
+    """Delete an attendance record (e.g., dismiss not_enrolled student)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            _q("DELETE FROM attendance WHERE id = ?"),
+            (attendance_id,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def get_attendance_today(course_code=None, level=None):
