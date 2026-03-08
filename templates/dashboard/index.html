@@ -340,6 +340,26 @@
     width: 90%;
   }
 
+  .modal-card-wide {
+    max-width: 600px;
+  }
+
+  .modal-view-header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  .modal-view-header h4 {
+    margin-bottom: 0;
+  }
+
+  .modal-view-meta {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+  }
+
   .modal-card h4 {
     margin-bottom: var(--space-2);
   }
@@ -644,6 +664,37 @@
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" data-dismiss="modal-end-session">Cancel</button>
       <button type="button" class="btn btn-danger" id="btn-confirm-end">End Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- View Attendance Modal -->
+<div class="modal-backdrop" id="modal-view-attendance" role="dialog" aria-modal="true" aria-labelledby="modal-view-title">
+  <div class="modal-card modal-card-wide">
+    <div class="modal-view-header">
+      <h4 id="modal-view-title">Session Attendance</h4>
+      <span class="modal-view-meta" id="modal-view-meta"></span>
+    </div>
+    <div class="table-scroll" style="max-height: 400px; overflow-y: auto;">
+      <table class="data-table" id="view-attendance-table">
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">Student ID</th>
+            <th scope="col">Name</th>
+            <th scope="col">Time</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody id="view-attendance-tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="view-attendance-empty" style="display: none;">
+      No attendance records
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" data-dismiss="modal-view-attendance">Close</button>
+      <button type="button" class="btn btn-primary" id="btn-view-export">Export CSV</button>
     </div>
   </div>
 </div>

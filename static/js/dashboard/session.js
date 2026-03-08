@@ -12,6 +12,7 @@
     pollingTimer: null,
     elapsedTimer: null,
     deleteTargetId: null,
+    viewSessionId: null,
     recentCourses: [],
   };
 
@@ -810,9 +811,14 @@
         escapeHtml(formatDuration(s.start_time, s.end_time)) +
         "</td>" +
         "<td>-</td>" +
-        '<td><button type="button" class="btn btn-ghost btn-sm" data-export="' +
+        '<td><button type="button" class="btn btn-ghost btn-sm" data-view="' +
         escapeHtml(String(s.id)) +
-        '">Export CSV</button> ' +
+        '" data-course="' + escapeHtml(s.course_code || "") +
+        '" data-date="' + escapeHtml(formatDate(s.start_time)) +
+        '">View</button> ' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-export="' +
+        escapeHtml(String(s.id)) +
+        '">Export</button> ' +
         '<button type="button" class="btn btn-ghost btn-sm btn-danger-ghost" data-delete="' +
         escapeHtml(String(s.id)) +
         '">Delete</button></td>';
@@ -879,6 +885,50 @@
       });
   }
 
+  function viewSessionAttendance(sessionId, courseCode, dateStr) {
+    state.viewSessionId = sessionId;
+    var meta = document.getElementById("modal-view-meta");
+    var tbody = document.getElementById("view-attendance-tbody");
+    var empty = document.getElementById("view-attendance-empty");
+
+    meta.textContent = (courseCode || "") + (dateStr ? " — " + dateStr : "");
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: var(--space-4);">Loading...</td></tr>';
+    empty.style.display = "none";
+    openModal("modal-view-attendance");
+
+    apiFetch("/api/sessions/" + sessionId + "/attendance")
+      .then(function (records) {
+        tbody.innerHTML = "";
+        if (!records || records.length === 0) {
+          empty.style.display = "flex";
+          return;
+        }
+        empty.style.display = "none";
+        var fragment = document.createDocumentFragment();
+        for (var i = 0; i < records.length; i++) {
+          var rec = records[i];
+          var tr = document.createElement("tr");
+          var statusText = rec.status || "present";
+          var pillClass = "pill-present";
+          if (statusText === "late") pillClass = "pill-late";
+          if (statusText === "not_enrolled") pillClass = "pill-not-enrolled";
+
+          tr.innerHTML =
+            "<td>" + (i + 1) + "</td>" +
+            '<td class="font-mono">' + escapeHtml(rec.student_id || "") + "</td>" +
+            "<td>" + escapeHtml(rec.student_name || "") + "</td>" +
+            "<td>" + escapeHtml(formatTime(rec.timestamp)) + "</td>" +
+            '<td><span class="pill ' + pillClass + '">' + escapeHtml(statusText) + "</span></td>";
+          fragment.appendChild(tr);
+        }
+        tbody.appendChild(fragment);
+      })
+      .catch(function () {
+        tbody.innerHTML = "";
+        empty.style.display = "flex";
+      });
+  }
+
   function exportSession(sessionId) {
     window.open("/api/sessions/" + sessionId + "/export", "_blank");
   }
@@ -940,9 +990,19 @@
     }
   });
 
-  // Delegated clicks on history table (export / delete)
+  // Delegated clicks on history table (view / export / delete)
   dom.historyTbody.addEventListener("click", function (e) {
     var target = e.target;
+
+    var viewBtn = target.closest("[data-view]");
+    if (viewBtn) {
+      viewSessionAttendance(
+        viewBtn.getAttribute("data-view"),
+        viewBtn.getAttribute("data-course"),
+        viewBtn.getAttribute("data-date")
+      );
+      return;
+    }
 
     var exportBtn = target.closest("[data-export]");
     if (exportBtn) {
@@ -956,6 +1016,16 @@
       openModal("modal-delete-session");
     }
   });
+
+  // Export from view modal
+  var btnViewExport = document.getElementById("btn-view-export");
+  if (btnViewExport) {
+    btnViewExport.addEventListener("click", function () {
+      if (state.viewSessionId) {
+        exportSession(state.viewSessionId);
+      }
+    });
+  }
 
   // Delegated clicks on attendance table (approve / dismiss)
   dom.attendanceTbody.addEventListener("click", function (e) {
