@@ -18,7 +18,8 @@ def attendance_trend():
 @dashboard_login_required
 def student_leaderboard():
     course = request.args.get("course")
-    data = db_helper.get_student_leaderboard(course)
+    user_id = session["user_id"]
+    data = db_helper.get_student_leaderboard(user_id, course)
     return jsonify(data)
 
 

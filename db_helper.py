@@ -1353,7 +1353,7 @@ def get_student_attendance(student_id, course_code=None):
 
 
 def get_student_attendance_stats(student_id, course_code=None):
-    """Get attendance stats for a student."""
+    """Get attendance stats for a student, scoped to their enrolled courses."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         if course_code:
@@ -1376,9 +1376,18 @@ def get_student_attendance_stats(student_id, course_code=None):
             )
             late = cursor.fetchone()["cnt"]
         else:
-            cursor.execute(
-                "SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0"
-            )
+            student = get_student_by_matric(student_id)
+            courses = json.loads(student["courses"]) if student and student.get("courses") else []
+            if courses:
+                placeholders = ",".join(["?"] * len(courses))
+                cursor.execute(
+                    _q(f"SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0 AND course_code IN ({placeholders})"),
+                    tuple(courses),
+                )
+            else:
+                cursor.execute(
+                    "SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0"
+                )
             total = cursor.fetchone()["cnt"]
             cursor.execute(
                 _q("SELECT COUNT(*) as cnt FROM attendance WHERE student_id = ? AND status = 'present'"),
@@ -1538,14 +1547,14 @@ def get_attendance_trend(user_id, course_code=None, limit=10):
         return list(reversed(result))
 
 
-def get_student_leaderboard(course_code=None, limit=50):
-    """Get students ranked by attendance rate."""
+def get_student_leaderboard(user_id, course_code=None, limit=50):
+    """Get students ranked by attendance rate, scoped to lecturer's sessions."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         if course_code:
             cursor.execute(
-                _q("SELECT COUNT(*) as cnt FROM class_sessions WHERE course_code = ? AND is_active = 0"),
-                (course_code,),
+                _q("SELECT COUNT(*) as cnt FROM class_sessions WHERE user_id = ? AND course_code = ? AND is_active = 0"),
+                (user_id, course_code),
             )
             total_sessions = cursor.fetchone()["cnt"]
 
@@ -1563,22 +1572,44 @@ def get_student_leaderboard(course_code=None, limit=50):
             students = cursor.fetchall()
         else:
             cursor.execute(
-                "SELECT COUNT(*) as cnt FROM class_sessions WHERE is_active = 0"
-            )
-            total_sessions = cursor.fetchone()["cnt"]
-
-            cursor.execute(
                 _q("""SELECT s.student_id, s.name, s.level,
-                          COUNT(a.id) as attended
+                          COUNT(a.id) as attended,
+                          (SELECT COUNT(*) FROM class_sessions cs
+                           WHERE cs.user_id = ? AND cs.is_active = 0
+                           AND s.courses LIKE '%' || cs.course_code || '%') as total_sessions
                    FROM students s
                    LEFT JOIN attendance a ON s.student_id = a.student_id
+                       AND a.session_id IN (SELECT id FROM class_sessions WHERE user_id = ?)
                    WHERE s.is_enrolled = 1
+                   AND EXISTS (SELECT 1 FROM class_sessions cs
+                               WHERE cs.user_id = ? AND cs.is_active = 0
+                               AND s.courses LIKE '%' || cs.course_code || '%')
                    GROUP BY s.student_id, s.name, s.level
                    ORDER BY attended DESC
                    LIMIT ?"""),
-                (limit,),
+                (user_id, user_id, user_id, limit),
             )
             students = cursor.fetchall()
+
+            result = []
+            for st in students:
+                total = st["total_sessions"]
+                rate = (
+                    round((st["attended"] / total) * 100, 1)
+                    if total > 0
+                    else 0
+                )
+                result.append(
+                    {
+                        "student_id": st["student_id"],
+                        "name": st["name"],
+                        "level": st["level"],
+                        "attended": st["attended"],
+                        "total_sessions": total,
+                        "rate": rate,
+                    }
+                )
+            return result
 
         result = []
         for st in students:
