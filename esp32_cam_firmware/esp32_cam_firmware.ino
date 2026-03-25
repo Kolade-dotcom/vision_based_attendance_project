@@ -5,8 +5,8 @@
  * - MJPEG video streaming on port 81
  * - HTTP control server on port 80
  * - 16x2 LCD display (I2C)
- * - Active buzzer for audio feedback (on/off only, no frequency control)
- * - Status LED for connection indication
+ * - Active buzzer: single boot beep + recognition feedback only
+ * - Status LED: WiFi indicator (blink=connecting, solid=connected)
  * - WiFi auto-reconnection
  * - Non-blocking buzzer patterns
  *
@@ -29,8 +29,8 @@
 // =============================================================================
 
 // WiFi Credentials (REQUIRED - change these!)
-const char *WIFI_SSID = "Redmi 10A";
-const char *WIFI_PASSWORD = "hotsc06e";
+const char *WIFI_SSID = "Redmi";
+const char *WIFI_PASSWORD = "00000000";
 
 // Static IP Configuration
 // Set USE_STATIC_IP to false to use DHCP (recommended for phone hotspots)
@@ -61,7 +61,7 @@ IPAddress dns(8, 8, 8, 8);
 
 // Timing Constants
 #define HEARTBEAT_TIMEOUT 10000      // 10 seconds without heartbeat = disconnected
-#define WIFI_CONNECT_TIMEOUT 20000   // 20 seconds to connect to WiFi
+#define WIFI_CONNECT_TIMEOUT 30000   // 30 seconds to connect to WiFi
 #define WIFI_RECONNECT_INTERVAL 5000 // 5 seconds between WiFi reconnect attempts
 #define STREAM_FRAME_DELAY 66        // ~15fps cap (matches OV2640 VGA output)
 
@@ -117,7 +117,8 @@ enum BuzzerPattern
     BUZZER_SUCCESS,
     BUZZER_ERROR,
     BUZZER_LATE,
-    BUZZER_SINGLE
+    BUZZER_SINGLE,
+    BUZZER_DUPLICATE
 };
 
 BuzzerPattern currentBuzzerPattern = BUZZER_IDLE;
@@ -163,7 +164,7 @@ bool initCamera()
     if (psramFound())
     {
         config.frame_size = FRAMESIZE_VGA; // 640x480 - good for face recognition
-        config.jpeg_quality = 12;          // 0-63, lower = better quality
+        config.jpeg_quality = 15;          // 0-63, lower = better quality, higher = faster streaming
         config.fb_count = 2;               // Double buffer for smoother streaming
     }
     else
@@ -318,6 +319,7 @@ void updateBuzzer()
     static const unsigned int errorPattern[] = {300, 200, 300, 0};
     static const unsigned int latePattern[] = {150, 100, 150, 0};
     static const unsigned int singlePattern[] = {100, 0};
+    static const unsigned int duplicatePattern[] = {80, 80, 80, 0};
 
     const unsigned int *pattern = NULL;
 
@@ -334,6 +336,9 @@ void updateBuzzer()
         break;
     case BUZZER_SINGLE:
         pattern = singlePattern;
+        break;
+    case BUZZER_DUPLICATE:
+        pattern = duplicatePattern;
         break;
     default:
         return;
@@ -392,6 +397,12 @@ void playLateTone()
     Serial.println("Late tone started");
 }
 
+void playDuplicateTone()
+{
+    startBuzzerPattern(BUZZER_DUPLICATE);
+    Serial.println("Duplicate tone started");
+}
+
 // Blocking single beep (only used during startup before servers are running)
 void beepBlocking(int duration)
 {
@@ -416,18 +427,14 @@ void updateLED()
 {
     unsigned long now = millis();
 
-    // Check heartbeat timeout
-    if (currentLEDState == LED_SOLID)
+    // Check heartbeat timeout (LCD notification only, LED is WiFi-only indicator)
+    if (lastHeartbeat > 0 && now - lastHeartbeat > HEARTBEAT_TIMEOUT)
     {
-        if (now - lastHeartbeat > HEARTBEAT_TIMEOUT)
+        if (!heartbeatLost)
         {
-            currentLEDState = LED_FAST_BLINK;
-            if (!heartbeatLost)
-            {
-                heartbeatLost = true;
-                displayMessage("Server Lost", "Reconnecting...");
-                Serial.println("Heartbeat timeout - lost connection");
-            }
+            heartbeatLost = true;
+            displayMessage("Server Lost", "Reconnecting...");
+            Serial.println("Heartbeat timeout - lost connection");
         }
     }
 
@@ -497,7 +504,10 @@ bool connectWiFi()
     currentLEDState = LED_SLOW_BLINK;
     displayMessage("Connecting to", "WiFi...");
 
+    WiFi.disconnect(true);  // Clear previous connection state
+    delay(100);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);   // Disable power saving — stabilizes phone hotspot connections
 
     if (USE_STATIC_IP)
     {
@@ -518,7 +528,8 @@ bool connectWiFi()
         if (millis() - startTime > WIFI_CONNECT_TIMEOUT)
         {
             Serial.println("\nWiFi connection timeout!");
-            displayMessage("WiFi Failed!", "Check settings");
+            WiFi.disconnect(true);  // Clean disconnect before retry
+            displayMessage("WiFi Failed!", "Retrying...");
             return false;
         }
 
@@ -528,11 +539,14 @@ bool connectWiFi()
         }
     }
 
+    // Wait a moment for the connection to stabilize
+    delay(500);
+
     Serial.println();
     Serial.print("Connected! IP: ");
     Serial.println(WiFi.localIP());
 
-    currentLEDState = LED_FAST_BLINK;
+    currentLEDState = LED_SOLID;
     wasConnected = true;
 
     char ipStr[16];
@@ -558,7 +572,7 @@ void checkWiFi()
         {
             // Just reconnected
             wasConnected = true;
-            currentLEDState = LED_FAST_BLINK;
+            currentLEDState = LED_SOLID;
             char ipStr[16];
             WiFi.localIP().toString().toCharArray(ipStr, 16);
             displayMessage("WiFi Restored!", ipStr);
@@ -622,7 +636,6 @@ void handleStatus()
 void handleHeartbeat()
 {
     lastHeartbeat = millis();
-    currentLEDState = LED_SOLID;
     heartbeatLost = false;
 
     StaticJsonDocument<64> doc;
@@ -690,6 +703,12 @@ void handleBuzzerLate()
     server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Late tone played\"}");
 }
 
+void handleBuzzerDuplicate()
+{
+    playDuplicateTone();
+    server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Duplicate tone played\"}");
+}
+
 void handleCapture()
 {
     camera_fb_t *fb = esp_camera_fb_get();
@@ -717,12 +736,19 @@ void handleNotFound()
 void handleStream()
 {
     WiFiClient client = streamServer.client();
+    client.setNoDelay(true); // Disable Nagle algorithm for lower latency
 
-    String response = "HTTP/1.1 200 OK\r\n";
-    response += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n";
-    response += "Access-Control-Allow-Origin: *\r\n";
-    response += "\r\n";
-    client.print(response);
+    // Pre-formatted HTTP response header (no heap allocation)
+    static const char STREAM_RESP[] =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n"
+        "Access-Control-Allow-Origin: *\r\n"
+        "Cache-Control: no-cache, no-store, must-revalidate\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n";
+    client.write(STREAM_RESP, sizeof(STREAM_RESP) - 1);
+
+    char partHeader[96];
 
     while (client.connected())
     {
@@ -733,19 +759,22 @@ void handleStream()
             break;
         }
 
-        String header = "--frame\r\n";
-        header += "Content-Type: image/jpeg\r\n";
-        header += "Content-Length: " + String(fb->len) + "\r\n";
-        header += "\r\n";
+        // Format part header with snprintf (zero String allocation)
+        int headerLen = snprintf(partHeader, sizeof(partHeader),
+                                 "--frame\r\n"
+                                 "Content-Type: image/jpeg\r\n"
+                                 "Content-Length: %u\r\n"
+                                 "\r\n",
+                                 fb->len);
 
-        client.print(header);
+        client.write(partHeader, headerLen);
         client.write(fb->buf, fb->len);
-        client.print("\r\n");
+        client.write("\r\n", 2);
 
         esp_camera_fb_return(fb);
 
-        // Cap at ~15fps to match OV2640 VGA output and save CPU
-        delay(STREAM_FRAME_DELAY);
+        // Minimal delay - yield to RTOS without artificial frame cap
+        delay(1);
     }
 }
 
@@ -764,6 +793,7 @@ void setupServers()
     server.on("/buzzer/success", HTTP_GET, handleBuzzerSuccess);
     server.on("/buzzer/error", HTTP_GET, handleBuzzerError);
     server.on("/buzzer/late", HTTP_GET, handleBuzzerLate);
+    server.on("/buzzer/duplicate", HTTP_GET, handleBuzzerDuplicate);
     server.on("/capture", HTTP_GET, handleCapture);
     server.onNotFound(handleNotFound);
 
@@ -790,6 +820,11 @@ void setupServers()
 
 void setup()
 {
+    // Immediately silence buzzer (active-LOW: HIGH = OFF)
+    // Must be done before anything else to prevent boot noise on GPIO 13
+    pinMode(BUZZER_PIN, OUTPUT);
+    digitalWrite(BUZZER_PIN, HIGH);
+
     Serial.begin(115200);
     Serial.println();
     Serial.println("================================");
@@ -815,14 +850,12 @@ void setup()
         }
     }
 
-    // Connect to WiFi
-    if (!connectWiFi())
+    // Connect to WiFi (retry until successful)
+    while (!connectWiFi())
     {
-        while (1)
-        {
-            updateLED();
-            delay(100);
-        }
+        Serial.println("Retrying WiFi in 5 seconds...");
+        displayMessage("WiFi Failed!", "Retrying...");
+        delay(5000);
     }
 
     // Setup HTTP servers
@@ -840,12 +873,7 @@ void setup()
     Serial.println(":81/stream");
     Serial.println();
 
-    // Success startup tone (blocking is fine here, just started)
-    beepBlocking(100);
-    delay(50);
-    beepBlocking(100);
-    delay(50);
-    beepBlocking(150);
+    // Startup tone already played at init (single beep only)
 }
 
 // =============================================================================

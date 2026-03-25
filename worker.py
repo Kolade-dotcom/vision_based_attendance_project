@@ -225,9 +225,11 @@ def start_capture(camera_source="auto", esp32_ip=None):
                                 },
                             )
                             logger.info(f"Recognized: {name} ({student_id})")
-
-                        # ESP32 feedback (always, so student gets confirmation)
-                        esp32.signal_success(name, student_id)
+                            # ESP32 feedback for new attendance
+                            esp32.signal_success(name, student_id)
+                        else:
+                            # Already logged — brief duplicate feedback
+                            esp32.signal_duplicate(name, student_id)
                 else:
                     if config and config.ESP32_SIGNAL_UNKNOWN:
                         esp32.signal_error("Unknown Person")
@@ -338,8 +340,8 @@ def on_session_start(data):
     active_session = data
     reported_students.clear()
 
-    # Load face encodings in background (don't block camera start)
-    threading.Thread(target=load_face_encodings, daemon=True).start()
+    # Load face encodings BEFORE starting capture to avoid missing early recognitions
+    load_face_encodings()
 
     # Fetch user's camera settings, then start capture
     user_id = data.get("user_id")

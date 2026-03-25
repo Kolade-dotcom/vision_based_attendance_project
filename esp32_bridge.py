@@ -224,6 +224,7 @@ class ESP32Bridge:
             "/buzzer/success": {"status": "ok", "message": "Success tone played"},
             "/buzzer/error": {"status": "ok", "message": "Error tone played"},
             "/buzzer/late": {"status": "ok", "message": "Late tone played"},
+            "/buzzer/duplicate": {"status": "ok", "message": "Duplicate tone played"},
             "/buzzer": {"status": "ok", "message": "Buzzer activated"},
         }
 
@@ -311,6 +312,20 @@ class ESP32Bridge:
 
         self.display_message("Late Arrival", student_name[:16] if student_name else "")
         return self.send_command("/buzzer/late")
+
+    def signal_duplicate(self, student_name: str = "", student_id: str = ""):
+        """
+        Signal that a student has already been logged in this session.
+
+        Args:
+            student_name: Name to display on LCD
+            student_id: Student ID for cooldown tracking
+        """
+        if student_id and not self._check_cooldown(student_id):
+            return None
+
+        self.display_message("Already Logged", student_name[:16] if student_name else "")
+        return self.send_command("/buzzer/duplicate")
 
     def show_status(self, status: str):
         """

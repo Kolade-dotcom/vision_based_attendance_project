@@ -150,6 +150,12 @@ def gen_frames(user_id):
     # Ensure camera is started
     camera.start()
 
+    # Cache active session and track reported students to avoid per-frame DB queries
+    active_session = None
+    _last_session_check = 0
+    _SESSION_CHECK_INTERVAL = 10  # Re-check active session every 10 seconds
+    reported_students = set()  # Track students already logged this session
+
     while True:
         frame = camera.get_frame()
         if frame is None:
@@ -181,13 +187,22 @@ def gen_frames(user_id):
         face_names = []
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # Get active session for this user to mark attendance
-        active_session = db_helper.get_active_session(user_id)
+        # Cache active session check — only query DB every N seconds, not every frame
+        now = time.time()
+        if now - _last_session_check >= _SESSION_CHECK_INTERVAL:
+            _last_session_check = now
+            new_session = db_helper.get_active_session(user_id)
+            if new_session != active_session:
+                active_session = new_session
+                if active_session:
+                    reported_students.clear()  # New session, reset tracking
+                    logger.info(f"Active session detected: {active_session.get('course_code')}")
+                else:
+                    logger.debug(f"No active session found for user_id={user_id}")
 
-        if not active_session:
-            logger.debug(f"No active session found for user_id={user_id}")
-        elif not known_face_encodings:
-            logger.debug("No known face encodings loaded")
+        if active_session and not known_face_encodings:
+            if detector.frame_count % 30 == 0:
+                logger.debug("No known face encodings loaded")
 
         if active_session and known_face_encodings:
             face_locations_for_rec = []
@@ -198,14 +213,10 @@ def gen_frames(user_id):
 
             if face_locations_for_rec and detector.frame_count % 30 == 0:
                 logger.debug(f"Processing {len(face_locations_for_rec)} face(s) for recognition")
-                logger.debug(f"Face boxes (x,y,w,h): {faces}")
-                logger.debug(f"Converted to (top,right,bottom,left): {face_locations_for_rec}")
 
             face_encodings = face_recognition.face_encodings(
                 rgb_frame, face_locations_for_rec
             )
-
-            logger.debug(f"Generated {len(face_encodings)} face encoding(s)")
 
             for face_encoding in face_encodings:
                 tolerance = config.FACE_RECOGNITION_TOLERANCE if config else 0.5
@@ -225,22 +236,24 @@ def gen_frames(user_id):
                         name = known_face_names[best_match_index]
                         student_id = known_student_ids[best_match_index]
 
-                        logger.debug(
-                            f"Match found at index {best_match_index}: {name} ({student_id}) distance: {face_distances[best_match_index]:.4f}"
-                        )
-                        result = db_helper.record_attendance(
-                            student_id,
-                            status="present",
-                            course_code=active_session["course_code"],
-                        )
+                        # Only hit the DB for students not yet reported this session
+                        if student_id not in reported_students:
+                            result = db_helper.record_attendance(
+                                student_id,
+                                status="present",
+                                course_code=active_session["course_code"],
+                            )
 
-                        # Signal ESP32 on successful recognition (not duplicate)
-                        if result:
-                            logger.info(f"Attendance recorded for {name} ({student_id})")
-                            if result.get("status") == "late":
-                                esp32.signal_late(name, student_id)
-                            else:
-                                esp32.signal_success(name, student_id)
+                            if result:
+                                reported_students.add(student_id)
+                                logger.info(f"Attendance recorded for {name} ({student_id})")
+                                if result.get("status") == "late":
+                                    esp32.signal_late(name, student_id)
+                                else:
+                                    esp32.signal_success(name, student_id)
+                        else:
+                            # Already logged — give brief feedback
+                            esp32.signal_duplicate(name, student_id)
                 else:
                     # Optional: Signal unknown face
                     if config and config.ESP32_SIGNAL_UNKNOWN:
