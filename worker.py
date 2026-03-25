@@ -130,6 +130,7 @@ def start_capture(camera_source="auto", esp32_ip=None):
     esp32 = get_esp32_bridge(esp32_ip=esp32_ip)
     if esp32.connect():
         esp32.start_heartbeat()
+        esp32.flash_on()
         esp32.show_ready()
 
     detector = FaceDetector(
@@ -293,6 +294,7 @@ def start_capture(camera_source="auto", esp32_ip=None):
     if camera:
         camera.stop()
     if esp32:
+        esp32.flash_off()
         esp32.stop_heartbeat()
     try:
         sio.emit("worker:status", {"status": "idle"})

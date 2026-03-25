@@ -41,14 +41,13 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress dns(8, 8, 8, 8);
 
 // Hardware Pin Definitions
-// NOTE: Buzzer on GPIO 13, LED on GPIO 12 is intentional.
-// GPIO 12 is a strapping pin pulled LOW during boot — safe for LED
-// (just turns LED on briefly during boot) but causes active-LOW
-// buzzers to sound continuously during boot if connected there.
+// Buzzer on GPIO 12: active-HIGH buzzer (sounds when pin is HIGH).
+// GPIO 12 is pulled LOW during boot, so active-HIGH buzzer stays silent at boot.
+// LED on GPIO 13: WiFi status indicator.
 #define LCD_SDA_PIN 14
 #define LCD_SCL_PIN 15
-#define BUZZER_PIN 13
-#define LED_PIN 12
+#define BUZZER_PIN 12
+#define LED_PIN 13
 #define FLASH_PIN 4              // Built-in camera flash LED
 #define FLASH_BRIGHTNESS 80      // 0-255 (80 = moderate, not blinding)
 
@@ -285,18 +284,18 @@ void clearLCD()
 void initBuzzer()
 {
     pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(BUZZER_PIN, HIGH); // HIGH = OFF for active-low buzzers
+    digitalWrite(BUZZER_PIN, LOW); // LOW = OFF for active-HIGH buzzer
     Serial.println("Buzzer initialized");
 }
 
 void buzzerOn()
 {
-    digitalWrite(BUZZER_PIN, LOW); // LOW = ON for active-low buzzers
+    digitalWrite(BUZZER_PIN, HIGH); // HIGH = ON for active-HIGH buzzer
 }
 
 void buzzerOff()
 {
-    digitalWrite(BUZZER_PIN, HIGH); // HIGH = OFF
+    digitalWrite(BUZZER_PIN, LOW); // LOW = OFF for active-HIGH buzzer
 }
 
 // Start a buzzer pattern (non-blocking)
@@ -732,6 +731,18 @@ void handleBuzzerDuplicate()
     server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Duplicate tone played\"}");
 }
 
+void handleFlashOn()
+{
+    setFlash(FLASH_BRIGHTNESS);
+    server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Flash on\"}");
+}
+
+void handleFlashOff()
+{
+    setFlash(0);
+    server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Flash off\"}");
+}
+
 void handleCapture()
 {
     camera_fb_t *fb = esp_camera_fb_get();
@@ -786,7 +797,6 @@ void handleStream()
     client.write(STREAM_RESP, sizeof(STREAM_RESP) - 1);
 
     streamActive = true;
-    setFlash(FLASH_BRIGHTNESS); // Turn on camera illumination during stream
     char partHeader[96];
 
     while (client.connected())
@@ -817,7 +827,6 @@ void handleStream()
     }
 
     streamActive = false;
-    setFlash(0); // Turn off flash when stream ends
 }
 
 // =============================================================================
@@ -836,6 +845,8 @@ void setupServers()
     server.on("/buzzer/error", HTTP_GET, handleBuzzerError);
     server.on("/buzzer/late", HTTP_GET, handleBuzzerLate);
     server.on("/buzzer/duplicate", HTTP_GET, handleBuzzerDuplicate);
+    server.on("/flash/on", HTTP_GET, handleFlashOn);
+    server.on("/flash/off", HTTP_GET, handleFlashOff);
     server.on("/capture", HTTP_GET, handleCapture);
     server.onNotFound(handleNotFound);
 
@@ -862,10 +873,10 @@ void setupServers()
 
 void setup()
 {
-    // Immediately silence buzzer (active-LOW: HIGH = OFF)
-    // Must be done before anything else to prevent boot noise on GPIO 13
+    // Immediately silence buzzer (active-HIGH: LOW = OFF)
+    // GPIO 12 is already pulled LOW at boot, but set it explicitly
     pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(BUZZER_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, LOW);
 
     Serial.begin(115200);
     Serial.println();
@@ -878,8 +889,7 @@ void setup()
     initBuzzer();
     initLCD();
 
-    // Play startup beep (blocking is fine here, servers aren't running yet)
-    beepBlocking(100);
+    // No startup beep — buzzer only sounds for recognition events
 
     // Initialize camera
     if (!initCamera())

@@ -225,6 +225,8 @@ class ESP32Bridge:
             "/buzzer/error": {"status": "ok", "message": "Error tone played"},
             "/buzzer/late": {"status": "ok", "message": "Late tone played"},
             "/buzzer/duplicate": {"status": "ok", "message": "Duplicate tone played"},
+            "/flash/on": {"status": "ok", "message": "Flash on"},
+            "/flash/off": {"status": "ok", "message": "Flash off"},
             "/buzzer": {"status": "ok", "message": "Buzzer activated"},
         }
 
@@ -352,6 +354,14 @@ class ESP32Bridge:
     def show_session_ended(self):
         """Show session ended message on LCD."""
         return self.display_message("Session Ended", "Thank you!")
+
+    def flash_on(self):
+        """Turn on the camera flash LED."""
+        return self.send_command("/flash/on")
+
+    def flash_off(self):
+        """Turn off the camera flash LED."""
+        return self.send_command("/flash/off")
 
     def get_status(self) -> Optional[dict]:
         """Get the current ESP32 status."""
