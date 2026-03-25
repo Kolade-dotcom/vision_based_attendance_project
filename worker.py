@@ -110,8 +110,17 @@ def start_capture(camera_source="auto", esp32_ip=None):
     reset_esp32_bridge()
 
     logger.info(f"Starting capture with source={camera_source}, esp32_ip={esp32_ip}")
-    # Reuse pre-warmed camera if available, otherwise create new
-    if camera is None or not (hasattr(camera, 'video_capture') and camera.video_capture is not None):
+    # Check if pre-warmed camera matches the requested source
+    # Pre-warm always uses webcam, so if esp32 is requested we must switch
+    is_webcam = camera is not None and hasattr(camera, 'camera_index')
+    need_esp32 = camera_source in ("esp32", "auto")
+
+    if camera is not None and is_webcam and need_esp32:
+        logger.info("Pre-warmed webcam doesn't match requested source, switching to ESP32")
+        reset_camera()
+        camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
+        camera.start()
+    elif camera is None or not (hasattr(camera, 'video_capture') and camera.video_capture is not None):
         reset_camera()
         camera = get_camera(source=camera_source, esp32_ip=esp32_ip)
         camera.start()
