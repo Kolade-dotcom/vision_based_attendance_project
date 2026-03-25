@@ -58,7 +58,10 @@ class ESP32Camera:
         
         # OpenCV can directly open MJPEG streams
         self.video_capture = cv2.VideoCapture(self.stream_url)
-        
+
+        # Minimize internal buffer to prevent stale frame buildup
+        self.video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
         # Set timeout for stream reading
         self.video_capture.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self.timeout * 1000)
         self.video_capture.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, self.timeout * 1000)
@@ -85,7 +88,8 @@ class ESP32Camera:
     def get_frame(self) -> Optional[np.ndarray]:
         """
         Capture a single frame from the ESP32-CAM stream.
-        
+        Flushes buffered frames to always return the most recent one.
+
         Returns:
             numpy.ndarray: The captured frame (BGR), or None if capture failed
         """
@@ -93,7 +97,12 @@ class ESP32Camera:
             # Try to reconnect
             if not self._try_reconnect():
                 return self.last_frame  # Return cached frame if available
-        
+
+        # Flush stale buffered frames — grab without decoding (fast),
+        # then read the latest. This prevents the 10+ second delay.
+        for _ in range(4):
+            self.video_capture.grab()
+
         ret, frame = self.video_capture.read()
         
         if not ret or frame is None:

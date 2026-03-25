@@ -49,6 +49,8 @@ IPAddress dns(8, 8, 8, 8);
 #define LCD_SCL_PIN 15
 #define BUZZER_PIN 13
 #define LED_PIN 12
+#define FLASH_PIN 4              // Built-in camera flash LED
+#define FLASH_BRIGHTNESS 80      // 0-255 (80 = moderate, not blinding)
 
 // LCD I2C Address (auto-detected in initLCD, fallback to 0x27)
 #define LCD_ADDRESS 0x27
@@ -492,6 +494,24 @@ void flashLED()
 }
 
 // =============================================================================
+// FLASH LED (GPIO 4 - built-in camera illumination)
+// =============================================================================
+
+void initFlash()
+{
+    // Use LEDC channel 7 for flash (channels 0-1 used by camera XCLK)
+    ledcSetup(7, 5000, 8); // Channel 7, 5kHz, 8-bit resolution
+    ledcAttachPin(FLASH_PIN, 7);
+    ledcWrite(7, 0); // Off initially
+    Serial.println("Flash LED initialized");
+}
+
+void setFlash(uint8_t brightness)
+{
+    ledcWrite(7, brightness);
+}
+
+// =============================================================================
 // WIFI CONNECTION & RECONNECTION
 // =============================================================================
 
@@ -763,6 +783,7 @@ void handleStream()
     client.write(STREAM_RESP, sizeof(STREAM_RESP) - 1);
 
     streamActive = true;
+    setFlash(FLASH_BRIGHTNESS); // Turn on camera illumination during stream
     char partHeader[96];
 
     while (client.connected())
@@ -793,6 +814,7 @@ void handleStream()
     }
 
     streamActive = false;
+    setFlash(0); // Turn off flash when stream ends
 }
 
 // =============================================================================
@@ -851,6 +873,7 @@ void setup()
     // Initialize hardware
     initLED();
     initBuzzer();
+    initFlash();
     initLCD();
 
     // Play startup beep (blocking is fine here, servers aren't running yet)
