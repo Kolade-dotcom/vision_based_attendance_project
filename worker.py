@@ -272,7 +272,11 @@ def start_capture(camera_source="auto", esp32_ip=None):
                 ".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
             )
             frame_b64 = base64.b64encode(jpeg.tobytes()).decode("ascii")
-            sio.emit("worker:frame", {"frame": frame_b64})
+            try:
+                sio.emit("worker:frame", {"frame": frame_b64})
+            except Exception:
+                # WebSocket briefly disconnected — skip frame, don't crash
+                pass
             last_frame_time = now
 
     # Cleanup
@@ -280,7 +284,10 @@ def start_capture(camera_source="auto", esp32_ip=None):
         camera.stop()
     if esp32:
         esp32.stop_heartbeat()
-    sio.emit("worker:status", {"status": "idle"})
+    try:
+        sio.emit("worker:status", {"status": "idle"})
+    except Exception:
+        pass
     logger.info("Capture stopped")
 
 
@@ -313,8 +320,10 @@ def _prewarm_camera():
 def on_auth_ok():
     logger.info("Authenticated with server")
     sio.emit("worker:status", {"status": "idle"})
-    # Pre-warm camera so it's ready when session starts
-    _prewarm_camera()
+    # Only pre-warm camera if no capture is currently running
+    # (avoids overwriting ESP32 camera with webcam mid-session)
+    if not running:
+        _prewarm_camera()
 
 
 @sio.on("worker:auth_fail")

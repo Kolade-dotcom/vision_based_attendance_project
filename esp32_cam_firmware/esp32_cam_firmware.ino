@@ -733,6 +733,20 @@ void handleNotFound()
 // HTTP HANDLERS - Stream Server (Port 81)
 // =============================================================================
 
+// Flag to let the control server task know streaming is active
+volatile bool streamActive = false;
+
+// FreeRTOS task: runs the control server (port 80) on core 0
+// so it stays responsive even while the stream handler blocks on core 1
+void controlServerTask(void *param)
+{
+    for (;;)
+    {
+        server.handleClient();
+        delay(1);
+    }
+}
+
 void handleStream()
 {
     WiFiClient client = streamServer.client();
@@ -748,6 +762,7 @@ void handleStream()
         "\r\n";
     client.write(STREAM_RESP, sizeof(STREAM_RESP) - 1);
 
+    streamActive = true;
     char partHeader[96];
 
     while (client.connected())
@@ -776,6 +791,8 @@ void handleStream()
         // Minimal delay - yield to RTOS without artificial frame cap
         delay(1);
     }
+
+    streamActive = false;
 }
 
 // =============================================================================
@@ -861,6 +878,9 @@ void setup()
     // Setup HTTP servers
     setupServers();
 
+    // Run control server (port 80) on core 0 so it works during streaming
+    xTaskCreatePinnedToCore(controlServerTask, "ControlServer", 4096, NULL, 1, NULL, 0);
+
     // Ready!
     displayMessage("System Ready", "Waiting...");
     Serial.println();
@@ -882,8 +902,8 @@ void setup()
 
 void loop()
 {
-    // Handle HTTP requests
-    server.handleClient();
+    // Control server (port 80) runs on core 0 via FreeRTOS task
+    // Only handle stream server (port 81) here
     streamServer.handleClient();
 
     // Update hardware state machines
