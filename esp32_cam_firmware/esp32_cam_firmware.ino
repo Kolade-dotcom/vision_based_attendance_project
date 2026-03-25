@@ -184,6 +184,9 @@ bool initCamera()
         return false;
     }
 
+    // Initialize flash AFTER camera to avoid GPIO 4 conflicts
+    initFlash();
+
     // Camera settings for better face detection
     sensor_t *s = esp_camera_sensor_get();
     if (s)
@@ -499,16 +502,16 @@ void flashLED()
 
 void initFlash()
 {
-    // Use LEDC channel 7 for flash (channels 0-1 used by camera XCLK)
-    ledcSetup(7, 5000, 8); // Channel 7, 5kHz, 8-bit resolution
-    ledcAttachPin(FLASH_PIN, 7);
-    ledcWrite(7, 0); // Off initially
+    // Use simple digital output to avoid LEDC timer conflicts with camera
+    pinMode(FLASH_PIN, OUTPUT);
+    digitalWrite(FLASH_PIN, LOW); // Off initially
     Serial.println("Flash LED initialized");
 }
 
 void setFlash(uint8_t brightness)
 {
-    ledcWrite(7, brightness);
+    // Simple on/off — avoids LEDC conflicts with camera XCLK
+    digitalWrite(FLASH_PIN, brightness > 0 ? HIGH : LOW);
 }
 
 // =============================================================================
@@ -873,7 +876,6 @@ void setup()
     // Initialize hardware
     initLED();
     initBuzzer();
-    initFlash();
     initLCD();
 
     // Play startup beep (blocking is fine here, servers aren't running yet)

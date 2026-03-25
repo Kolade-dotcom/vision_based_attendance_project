@@ -99,9 +99,8 @@ class ESP32Camera:
                 return self.last_frame  # Return cached frame if available
 
         # Flush stale buffered frames — grab without decoding (fast),
-        # then read the latest. This prevents the 10+ second delay.
-        for _ in range(4):
-            self.video_capture.grab()
+        # then read the latest. This prevents stale frame delay.
+        self.video_capture.grab()
 
         ret, frame = self.video_capture.read()
         
