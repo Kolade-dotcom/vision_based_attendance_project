@@ -172,7 +172,10 @@ def start_capture(camera_source="auto", esp32_ip=None):
         if is_low_light or is_too_bright:
             if _last_low_light_state != "bad":
                 msg = "Too dark - move to a brighter area" if is_low_light else "Too bright - reduce lighting"
-                sio.emit("camera:low_light", {"is_low": True, "message": msg})
+                try:
+                    sio.emit("camera:low_light", {"is_low": True, "message": msg})
+                except Exception:
+                    pass
                 _last_low_light_state = "bad"
             # Overlay warning on frame
             cv2.putText(
@@ -186,7 +189,10 @@ def start_capture(camera_source="auto", esp32_ip=None):
             )
         else:
             if _last_low_light_state != "ok":
-                sio.emit("camera:low_light", {"is_low": False, "message": ""})
+                try:
+                    sio.emit("camera:low_light", {"is_low": False, "message": ""})
+                except Exception:
+                    pass
                 _last_low_light_state = "ok"
 
         # Face detection
@@ -224,18 +230,22 @@ def start_capture(camera_source="auto", esp32_ip=None):
 
                         # Report attendance to cloud (only once per student per session)
                         if student_id not in reported_students:
-                            reported_students.add(student_id)
-                            sio.emit(
-                                "worker:attendance",
-                                {
-                                    "student_id": student_id,
-                                    "status": "present",
-                                    "course_code": active_session.get("course_code"),
-                                },
-                            )
-                            logger.info(f"Recognized: {name} ({student_id})")
-                            # ESP32 feedback for new attendance
-                            esp32.signal_success(name, student_id)
+                            try:
+                                sio.emit(
+                                    "worker:attendance",
+                                    {
+                                        "student_id": student_id,
+                                        "status": "present",
+                                        "course_code": active_session.get("course_code"),
+                                    },
+                                )
+                                # Only mark as reported AFTER successful emit
+                                reported_students.add(student_id)
+                                logger.info(f"Recognized: {name} ({student_id})")
+                                esp32.signal_success(name, student_id)
+                            except Exception:
+                                # WebSocket down — don't mark as reported, retry next frame
+                                logger.warning(f"Failed to report {name}, will retry")
                         else:
                             # Already logged — brief duplicate feedback
                             esp32.signal_duplicate(name, student_id)
@@ -319,10 +329,13 @@ def _prewarm_camera():
 @sio.on("worker:auth_ok")
 def on_auth_ok():
     logger.info("Authenticated with server")
-    sio.emit("worker:status", {"status": "idle"})
-    # Only pre-warm camera if no capture is currently running
-    # (avoids overwriting ESP32 camera with webcam mid-session)
-    if not running:
+    if running:
+        # Reconnected while capture is active — tell dashboard we're still going
+        logger.info("Reconnected with active capture, resuming stream")
+        from camera import _camera_source as actual_source
+        sio.emit("worker:status", {"status": "capturing", "camera_source": actual_source or "esp32"})
+    else:
+        sio.emit("worker:status", {"status": "idle"})
         _prewarm_camera()
 
 
@@ -392,10 +405,9 @@ def on_connect():
 
 @sio.on("disconnect")
 def on_disconnect():
-    global active_session
-    logger.warning("Disconnected from server")
-    active_session = None
-    stop_capture()
+    # Don't kill session/capture on brief disconnects — Render free tier drops
+    # connections often. Capture continues locally and resumes streaming on reconnect.
+    logger.warning("Disconnected from server (capture continues if active)")
 
 
 # --- Main ---
