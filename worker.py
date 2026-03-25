@@ -128,7 +128,12 @@ def start_capture(camera_source="auto", esp32_ip=None):
         logger.info("Reusing pre-warmed camera")
 
     esp32 = get_esp32_bridge(esp32_ip=esp32_ip)
-    if esp32.connect():
+    # Stream may take a moment to stabilize — retry bridge connection
+    if not esp32.connect():
+        logger.warning("ESP32 bridge connect failed, retrying in 3s...")
+        time.sleep(3)
+        esp32.connect()
+    if esp32.is_connected:
         esp32.start_heartbeat()
         esp32.flash_on()
         esp32.show_ready()
